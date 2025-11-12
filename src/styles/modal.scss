@@ -1,0 +1,307 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 20px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+  h3 {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+  }
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.success-body {
+  text-align: center;
+
+  .success-label {
+    font-size: 16px;
+    color: #e3dfeb;
+    margin-bottom: 8px;
+  }
+
+  .success-amount {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffd44b;
+    margin-bottom: 24px;
+  }
+
+  .success-win {
+    font-size: 24px;
+    font-weight: 700;
+    color: #00d72b;
+    margin-bottom: 24px;
+  }
+
+  .success-message {
+    font-size: 14px;
+    color: #bfbfbf;
+    margin-bottom: 24px;
+  }
+}
+
+.match-title {
+  text-align: center;
+  margin-bottom: 24px;
+
+  p {
+    font-size: 16px;
+    color: #e3dfeb;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #bfbfbf;
+  }
+}
+
+.team-button {
+  width: 100%;
+  padding: 20px;
+  margin-bottom: 16px;
+  border: none;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .team-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+    }
+
+    span {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+  }
+
+  .odds {
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffd148;
+  }
+}
+
+.match-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+
+  .team-logo {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+  }
+
+  .vs-title {
+    font-size: 14px;
+    color: #bfbfbf;
+    margin-bottom: 4px;
+  }
+
+  .chosen-team {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fafafa;
+  }
+
+  .prize-pool {
+    margin-left: auto;
+    text-align: right;
+
+    p {
+      font-size: 12px;
+      color: #bfbfbf;
+      margin-bottom: 4px;
+    }
+
+    span {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffd148;
+    }
+  }
+}
+
+.amount-section,
+.win-section {
+  margin-bottom: 24px;
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+
+    p {
+      font-size: 14px;
+      color: #bfbfbf;
+    }
+
+    span {
+      font-size: 12px;
+      color: #bfbfbf;
+    }
+  }
+
+  .amount-display,
+  .win-display {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fafafa;
+  }
+
+  .win-display {
+    color: #00d72b;
+  }
+}
+
+.betting-section {
+  margin-bottom: 24px;
+
+  .slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+    -webkit-appearance: none;
+    margin-bottom: 8px;
+
+    &::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #667eea;
+      cursor: pointer;
+    }
+
+    &::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #667eea;
+      cursor: pointer;
+      border: none;
+    }
+  }
+
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+
+    span {
+      font-size: 12px;
+      color: #bfbfbf;
+    }
+  }
+
+  .quick-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+
+    button {
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: transparent;
+      color: #fafafa;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+    }
+  }
+}
+
+.confirm-button,
+.cancel-button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.confirm-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin-bottom: 12px;
+
+  &:hover:not(:disabled) {
+    transform: scale(1.02);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.cancel-button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #fafafa;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}

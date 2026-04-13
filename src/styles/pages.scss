@@ -1,170 +1,244 @@
+/* ===== Shared layout ===== */
 .container {
-  max-width: 600px;
+  width: 100%;
+  max-width: 420px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 16px 16px 100px;
 }
 
+/* ===== Page header ===== */
 .header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+  padding-top: 8px;
 
   h1 {
-    font-size: 28px;
-    margin-bottom: 8px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.2px;
+    line-height: 145.9%;
+    margin-bottom: 4px;
   }
 
   p {
-    color: #bfbfbf;
-    font-size: 14px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: #cac5d6;
   }
 }
 
+/* ===== State messages ===== */
 .loading,
-.error,
 .empty {
   text-align: center;
-  padding: 40px 20px;
-  font-size: 16px;
+  padding: 48px 20px;
+
+  p,
+  & {
+    font-family: 'Poppins', sans-serif;
+    font-size: 14px;
+    color: #cac5d6;
+  }
 }
 
 .error {
-  color: #e74c3c;
+  text-align: center;
+  padding: 48px 20px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  color: #cd0000;
 }
 
+/* ===== Skeleton shimmer ===== */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(40, 23, 74, 0.2) 0%,
+    rgba(40, 23, 74, 0.35) 50%,
+    rgba(40, 23, 74, 0.2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* ===== Predict page – match list ===== */
 .match-list,
 .claim-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
-.match-card,
-.claim-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-2px);
-  }
-}
-
+/* ===== Match card ===== */
 .match-card {
-  .match-date {
-    color: #bfbfbf;
-    font-size: 12px;
-    margin-bottom: 16px;
-  }
+  background: linear-gradient(to top, rgba(28, 21, 42, 0.86), #392364);
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 
-  .teams {
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+/* Date / time pill */
+.match-date {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  width: fit-content;
+  border-radius: 9999px;
+  background: rgba(40, 23, 74, 0.90);
+  box-shadow: 0px 4px 4.6px 0px rgba(0, 0, 0, 0.25) inset;
+  padding: 5px 16px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cac5d6;
+  letter-spacing: 0.4px;
+}
+
+/* Teams row */
+.teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 8px;
+
+  .team {
+    flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    gap: 12px;
-
-    .team {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-
-      img {
-        width: 48px;
-        height: 48px;
-        object-fit: contain;
-      }
-
-      span {
-        font-size: 14px;
-        font-weight: 600;
-        text-align: center;
-      }
-
-      .ratio {
-        color: #ffd148;
-        font-size: 18px;
-        font-weight: 700;
-      }
-    }
-
-    .vs {
-      color: #bfbfbf;
-      font-size: 12px;
-      font-weight: 700;
-    }
-  }
-
-  .pool-info {
-    display: flex;
-    justify-content: space-around;
-    margin-bottom: 16px;
-    padding: 12px 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-
-    .pool-item {
-      font-size: 12px;
-      color: #bfbfbf;
-
-      span {
-        font-weight: 600;
-      }
-    }
-  }
-
-  .predict-button {
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    border-radius: 12px;
-    color: white;
-    font-size: 14px;
+    gap: 6px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    color: #f1eef8;
+    letter-spacing: -0.1px;
+    line-height: 145.9%;
+    text-align: center;
+    word-break: break-word;
 
-    &:hover {
-      transform: scale(1.02);
+    img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+    }
+
+    .ratio {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      background: linear-gradient(180deg, #ffd24a -39.47%, #ffad35 115.79%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+  }
+
+  .vs {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: #cac5d6;
+    min-width: 24px;
+    text-align: center;
+  }
+}
+
+/* Pool info row */
+.pool-info {
+  display: flex;
+  justify-content: space-around;
+  padding-top: 10px;
+  border-top: 1px solid rgba(78, 57, 120, 0.5);
+  margin-bottom: 12px;
+
+  .pool-item {
+    font-family: 'Poppins', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    color: #cac5d6;
+    text-align: center;
+
+    span {
+      font-weight: 600;
     }
   }
 }
 
-.claim-card {
-  cursor: default;
+/* Predict CTA button on the card */
+.predict-button {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #fff960 -78.85%, #ffa731 103.85%);
+  box-shadow: 0px 4px 10px rgba(255, 171, 56, 0.4);
+  color: #fafafa;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.15s ease;
 
-  &:hover {
-    transform: none;
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.9;
   }
+}
+
+/* ===== Claim page – claim cards ===== */
+.claim-card {
+  background: linear-gradient(to top, rgba(28, 21, 42, 0.86), #392364);
+  border-radius: 12px;
+  padding: 14px;
 
   .claim-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: flex-start;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(78, 57, 120, 0.5);
 
     h3 {
-      font-size: 16px;
-      font-weight: 600;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1eef8;
+      line-height: 145.9%;
     }
 
     .date {
-      font-size: 12px;
-      color: #bfbfbf;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #cac5d6;
+      white-space: nowrap;
+      margin-left: 8px;
     }
   }
 
   .claim-details {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 10px;
+    margin-bottom: 16px;
 
     .detail-row {
       display: flex;
@@ -172,16 +246,20 @@
       align-items: center;
 
       span {
-        color: #bfbfbf;
-        font-size: 14px;
+        font-family: 'Poppins', sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        color: #cac5d6;
       }
 
       strong {
-        font-size: 16px;
-        color: #fafafa;
+        font-family: 'Poppins', sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        color: #f1eef8;
 
         &.win-amount {
-          color: #00d72b;
+          color: #bff009;
         }
       }
     }
@@ -189,22 +267,27 @@
 
   .claim-button {
     width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #00d72b 0%, #00a121 100%);
+    padding: 12px;
     border: none;
-    border-radius: 12px;
-    color: white;
-    font-size: 14px;
+    border-radius: 99px;
+    background: linear-gradient(180deg, #fff960 -78.85%, #ffa731 103.85%);
+    box-shadow: 0px 4px 10px rgba(255, 171, 56, 0.4);
+    color: #fafafa;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 13px;
     font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: opacity 0.2s ease, transform 0.15s ease;
 
-    &:hover:not(:disabled) {
-      transform: scale(1.02);
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
-      opacity: 0.6;
+      background: #808080;
+      box-shadow: none;
       cursor: not-allowed;
     }
   }

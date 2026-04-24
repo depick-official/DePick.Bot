@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --mode dev",
+    "build:uat": "tsc && vite build --mode uat --outDir dist-uat",
+    "build:prod": "tsc && vite build --mode prod --outDir dist-prod",
+    "build:all": "npm run build:uat && npm run build:prod",
     "preview": "vite preview"
   },
   "dependencies": {

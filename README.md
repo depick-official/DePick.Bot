@@ -98,3 +98,56 @@ URL_HOSTING_TELEGRAM_APP=https://yourdomain.com
 ```
 
 Bot uses same origin for API calls (no `VITE_API_URL` needed).
+
+### Deploy to VPS (SCP / rsync)
+
+If you want to deploy frontend static files directly to VPS:
+
+**Target VPS**
+- Host: `82.112.250.76`
+- User: `root`
+- Deploy path (uat): `/root/depick/uat/bot-frontend/`
+- Deploy path (prod): `/root/depick/prod/bot-frontend/`
+
+1. Build all environments:
+```bash
+npm run build:all
+```
+
+2. Deploy to UAT
+  
+Clean old UAT files (optional):
+```bash
+ssh root@82.112.250.76 "rm -rf /root/depick/uat/bot-frontend/*"
+```
+
+Upload UAT with SCP:
+```bash
+scp -r dist-uat/* root@82.112.250.76:/root/depick/uat/bot-frontend/
+```
+
+Or upload UAT with rsync (recommended):
+```bash
+rsync -avz --delete dist-uat/ root@82.112.250.76:/root/depick/uat/bot-frontend/
+```
+
+3. Deploy to PROD
+
+Clean old PROD files (optional):
+```bash
+ssh root@82.112.250.76 "rm -rf /root/depick/prod/bot-frontend/*"
+```
+
+Upload PROD with SCP:
+```bash
+scp -r dist-prod/* root@82.112.250.76:/root/depick/prod/bot-frontend/
+```
+
+Or upload PROD with rsync (recommended):
+```bash
+rsync -avz --delete dist-prod/ root@82.112.250.76:/root/depick/prod/bot-frontend/
+```
+
+#### Notes
+- `scp` is simple and works almost everywhere.
+- `rsync --delete` keeps VPS directory exactly in sync with local build output.

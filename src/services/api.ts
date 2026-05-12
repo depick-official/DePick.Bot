@@ -3,6 +3,16 @@ import { tokenUtils } from '../utils/token';
 import { Prediction } from '../types/Prediction';
 import { PredictionRecord, CreatePredictionRecordRequest } from '../types/PredictionRecord';
 import { User } from '../types/User';
+import {
+  CreateOfficePoolRequest,
+  JoinOfficePoolRequest,
+  OfficePoolJoinResponse,
+  OfficePoolLeaderboardResponse,
+  OfficePoolMemberSummary,
+  OfficePoolPickOption,
+  OfficePoolPredictionSummary,
+  OfficePoolSummary,
+} from '../types/OfficePool';
 
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
@@ -11,6 +21,7 @@ const api: AxiosInstance = axios.create({
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
   },
 });
 
@@ -77,6 +88,68 @@ export const predictionRecordApi = {
 export const userApi = {
   getUserById: async (id: string): Promise<User> => {
     const response = await api.get<User>(`/users/${id}`);
+    return response.data;
+  },
+};
+
+export const officePoolApi = {
+  list: async (): Promise<OfficePoolSummary[]> => {
+    const response = await api.get<OfficePoolSummary[]>('/office-pools');
+    return response.data;
+  },
+
+  listMine: async (): Promise<OfficePoolSummary[]> => {
+    const response = await api.get<OfficePoolSummary[]>('/office-pools/my');
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<OfficePoolSummary> => {
+    const response = await api.get<OfficePoolSummary>(`/office-pools/${id}`);
+    return response.data;
+  },
+
+  getByInviteCode: async (inviteCode: string): Promise<OfficePoolSummary> => {
+    const response = await api.get<OfficePoolSummary>(`/office-pools/invite/${inviteCode}`);
+    return response.data;
+  },
+
+  create: async (data: CreateOfficePoolRequest): Promise<OfficePoolSummary> => {
+    const response = await api.post<OfficePoolSummary>('/office-pools', data);
+    return response.data;
+  },
+
+  join: async (id: string, data: JoinOfficePoolRequest): Promise<OfficePoolJoinResponse> => {
+    const response = await api.post<OfficePoolJoinResponse>(`/office-pools/${id}/join`, data);
+    return response.data;
+  },
+
+  setChampionPick: async (id: string, championPickTeamId: string): Promise<OfficePoolMemberSummary> => {
+    const response = await api.post<OfficePoolMemberSummary>(`/office-pools/${id}/champion-pick`, { championPickTeamId });
+    return response.data;
+  },
+
+  getMembers: async (id: string): Promise<OfficePoolMemberSummary[]> => {
+    const response = await api.get<OfficePoolMemberSummary[]>(`/office-pools/${id}/members`);
+    return response.data;
+  },
+
+  getPredictions: async (id: string): Promise<OfficePoolPredictionSummary[]> => {
+    const response = await api.get<OfficePoolPredictionSummary[]>(`/office-pools/${id}/predictions`);
+    return response.data;
+  },
+
+  getPicks: async (id: string): Promise<Record<string, OfficePoolPickOption>> => {
+    const response = await api.get<Record<string, OfficePoolPickOption>>(`/office-pools/${id}/picks/map`);
+    return response.data;
+  },
+
+  savePicks: async (id: string, picks: Record<string, OfficePoolPickOption>): Promise<{ saved: number }> => {
+    const response = await api.post<{ saved: number }>(`/office-pools/${id}/picks`, { picks });
+    return response.data;
+  },
+
+  getLeaderboard: async (id: string): Promise<OfficePoolLeaderboardResponse> => {
+    const response = await api.get<OfficePoolLeaderboardResponse>(`/office-pools/${id}/leaderboard`);
     return response.data;
   },
 };

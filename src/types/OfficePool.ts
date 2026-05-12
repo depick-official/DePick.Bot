@@ -17,7 +17,6 @@ export interface OfficePoolSummary {
   scopeProvider?: string | null;
   scopeExternalId?: string | null;
   entryFee: number;
-  maxParticipants: number;
   participants: number;
   isMember: boolean;
   createTime: string;
@@ -33,8 +32,7 @@ export interface CreateOfficePoolRequest {
   accessPolicy?: OfficePoolAccessPolicy;
   scopeProvider?: string;
   scopeExternalId?: string;
-  entryFee?: number;
-  maxParticipants?: number;
+  entryFee: number;
   championPickTeamId?: string;
 }
 

@@ -7,6 +7,7 @@ import OfficePoolPage from './pages/OfficePoolPage';
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<OfficePoolPage />} />
       <Route path="/predict" element={<PredictPage />} />
       <Route path="/predict/:matchId" element={<PredictPage />} />
       <Route path="/claim" element={<ClaimPage />} />

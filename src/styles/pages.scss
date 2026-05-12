@@ -445,6 +445,28 @@
     }
   }
 
+  .office-pool-date-preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .office-pool-date-chip {
+    border: 1px solid rgba(202, 197, 214, 0.14);
+    background: rgba(26, 0, 38, 0.42);
+    color: #fff;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 11px;
+  }
+
+  .office-pool-date-select-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
   .office-pool-list,
   .office-pool-match-list,
   .office-pool-leaderboard,

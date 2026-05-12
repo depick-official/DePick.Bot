@@ -29,6 +29,10 @@ interface TelegramAuthVerifyResponse {
   auth_token: string;
 }
 
+interface TelegramMiniAppVerifyRequest {
+  initData: string;
+}
+
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
 const api: AxiosInstance = axios.create({
@@ -177,6 +181,15 @@ export const officePoolApi = {
 export const telegramAuthApi = {
   verify: async (data: TelegramAuthVerifyRequest): Promise<TelegramAuthVerifyResponse> => {
     const response = await api.post<TelegramAuthVerifyResponse>('/auth/telegram/verify', data, {
+      headers: {
+        Authorization: undefined,
+      },
+    });
+    return response.data;
+  },
+
+  verifyMiniApp: async (data: TelegramMiniAppVerifyRequest): Promise<TelegramAuthVerifyResponse> => {
+    const response = await api.post<TelegramAuthVerifyResponse>('/auth/telegram/miniapp/verify', data, {
       headers: {
         Authorization: undefined,
       },

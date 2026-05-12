@@ -14,6 +14,21 @@ import {
   OfficePoolSummary,
 } from '../types/OfficePool';
 
+interface TelegramAuthVerifyRequest {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
+interface TelegramAuthVerifyResponse {
+  success: boolean;
+  auth_token: string;
+}
+
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
 const api: AxiosInstance = axios.create({
@@ -93,8 +108,13 @@ export const userApi = {
 };
 
 export const officePoolApi = {
-  list: async (): Promise<OfficePoolSummary[]> => {
-    const response = await api.get<OfficePoolSummary[]>('/office-pools');
+  list: async (scope?: { scopeProvider?: string; scopeExternalId?: string }): Promise<OfficePoolSummary[]> => {
+    const response = await api.get<OfficePoolSummary[]>('/office-pools', {
+      params: {
+        scopeProvider: scope?.scopeProvider,
+        scopeExternalId: scope?.scopeExternalId,
+      },
+    });
     return response.data;
   },
 
@@ -150,6 +170,17 @@ export const officePoolApi = {
 
   getLeaderboard: async (id: string): Promise<OfficePoolLeaderboardResponse> => {
     const response = await api.get<OfficePoolLeaderboardResponse>(`/office-pools/${id}/leaderboard`);
+    return response.data;
+  },
+};
+
+export const telegramAuthApi = {
+  verify: async (data: TelegramAuthVerifyRequest): Promise<TelegramAuthVerifyResponse> => {
+    const response = await api.post<TelegramAuthVerifyResponse>('/auth/telegram/verify', data, {
+      headers: {
+        Authorization: undefined,
+      },
+    });
     return response.data;
   },
 };

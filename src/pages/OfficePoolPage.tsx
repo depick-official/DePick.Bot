@@ -212,6 +212,7 @@ export default function OfficePoolPage() {
   const [myPools, setMyPools] = useState<OfficePoolSummary[]>([]);
   const [activePoolId, setActivePoolId] = useState('');
   const [activePool, setActivePool] = useState<OfficePoolSummary | null>(null);
+  const [poolReloadToken, setPoolReloadToken] = useState(0);
   const [members, setMembers] = useState<OfficePoolMemberSummary[]>([]);
   const [predictions, setPredictions] = useState<OfficePoolPredictionSummary[]>([]);
   const [leaderboard, setLeaderboard] = useState<OfficePoolLeaderboardResponse | null>(null);
@@ -305,6 +306,7 @@ export default function OfficePoolPage() {
         setError(null);
 
         let nextToken = sessionToken;
+        const requiresScopedTelegramAuth = isScopedLaunch;
 
         if (authToken) {
           tokenUtils.setToken(authToken, 'TELEGRAM');
@@ -320,6 +322,10 @@ export default function OfficePoolPage() {
           tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
           nextToken = authResponse.auth_token;
           setSessionToken(authResponse.auth_token);
+        } else if (requiresScopedTelegramAuth) {
+          tokenUtils.removeToken();
+          setSessionToken(null);
+          throw new Error('Missing Telegram Mini App session. Re-open Office Pool from Telegram.');
         } else if (!tokenUtils.isTokenValid()) {
           throw new Error('Missing authentication token');
         } else {
@@ -409,7 +415,7 @@ export default function OfficePoolPage() {
     };
 
     void loadPoolContext();
-  }, [activePoolId, screen]);
+  }, [activePoolId, poolReloadToken, screen]);
 
   useEffect(() => {
     if (!myMember?.championPickTeamId) return;
@@ -427,9 +433,16 @@ export default function OfficePoolPage() {
     setAllPools(all);
   };
 
+  const refreshHomeInBackground = () => {
+    void refreshHome().catch((err) => {
+      console.error('Failed to refresh office pool home state:', err);
+    });
+  };
+
   const openPool = (poolId: string, nextScreen: Screen = 'detail') => {
     setActivePool(null);
     setActivePoolId(poolId);
+    setPoolReloadToken((current) => current + 1);
     setSelectedChampionPick('');
     setScreen(nextScreen);
     setError(null);
@@ -471,12 +484,12 @@ export default function OfficePoolPage() {
       };
 
       const pool = await officePoolApi.create(payload);
-      await refreshHome();
       setCreateName('');
       setCreateSeasonKey('');
       setCreateEntryFee('10');
       openPool(pool.id, 'detail');
       setNotice(`Created ${pool.name}. Set your champion pick next.`);
+      refreshHomeInBackground();
     } catch (err: any) {
       console.error('Failed to create office pool:', err);
       setError(err?.response?.data?.message ?? 'Failed to create office pool');
@@ -491,13 +504,13 @@ export default function OfficePoolPage() {
       setIsSaving(true);
       setError(null);
       setNotice(null);
-      await officePoolApi.join(activePool.id, {
+      const response = await officePoolApi.join(activePool.id, {
         inviteCode: joinInviteCode.trim().toUpperCase() || activePool.inviteCode,
         championPickTeamId: selectedChampionPick,
       });
-      await refreshHome();
-      openPool(activePool.id, 'detail');
-      setNotice(`Joined ${activePool.name}`);
+      openPool(response.pool.id, 'detail');
+      setNotice(`Joined ${response.pool.name}`);
+      refreshHomeInBackground();
     } catch (err: any) {
       console.error('Failed to join office pool:', err);
       setError(err?.response?.data?.message ?? 'Failed to join office pool');

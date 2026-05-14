@@ -1,6 +1,8 @@
 export type OfficePoolStatus = 'OPEN' | 'LIVE' | 'LOCKED' | 'SETTLED' | 'ARCHIVED';
 export type OfficePoolAccessPolicy = 'INVITE_LOCK' | 'OPEN';
 export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY';
+export type OfficePoolMode = 'WORLD_CUP_GROUP_STAGE' | 'WORLD_CUP_KNOCKOUT_STAGE';
+export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
 
 export interface OfficePoolSummary {
   id: string;
@@ -9,6 +11,7 @@ export interface OfficePoolSummary {
   creatorUsername: string;
   inviteCode: string;
   status: OfficePoolStatus;
+  mode: OfficePoolMode;
   accessPolicy: OfficePoolAccessPolicy;
   tournament: string;
   seasonKey?: string;
@@ -19,12 +22,14 @@ export interface OfficePoolSummary {
   entryFee: number;
   participants: number;
   isMember: boolean;
+  isCreator: boolean;
   createTime: string;
   updateTime: string;
 }
 
 export interface CreateOfficePoolRequest {
   name: string;
+  mode: OfficePoolMode;
   tournament: string;
   seasonKey?: string;
   startsAt: string;
@@ -48,6 +53,19 @@ export interface OfficePoolMemberSummary {
   championPickTeamId?: string | null;
   championPickTeamName?: string | null;
   createTime: string;
+}
+
+export interface OfficePoolSidePickSummary {
+  type: OfficePoolSidePickType;
+  key: string;
+  teamId: string;
+  teamName: string;
+}
+
+export interface SetOfficePoolSidePickItem {
+  type: OfficePoolSidePickType;
+  key: string;
+  teamId: string;
 }
 
 export interface OfficePoolPredictionSummary {

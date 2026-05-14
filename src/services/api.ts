@@ -11,7 +11,9 @@ import {
   OfficePoolMemberSummary,
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
+  OfficePoolSidePickSummary,
   OfficePoolSummary,
+  SetOfficePoolSidePickItem,
 } from '../types/OfficePool';
 
 interface TelegramAuthVerifyRequest {
@@ -149,6 +151,16 @@ export const officePoolApi = {
 
   setChampionPick: async (id: string, championPickTeamId: string): Promise<OfficePoolMemberSummary> => {
     const response = await api.post<OfficePoolMemberSummary>(`/office-pools/${id}/champion-pick`, { championPickTeamId });
+    return response.data;
+  },
+
+  getSidePicks: async (id: string): Promise<OfficePoolSidePickSummary[]> => {
+    const response = await api.get<OfficePoolSidePickSummary[]>(`/office-pools/${id}/side-picks`);
+    return response.data;
+  },
+
+  saveSidePicks: async (id: string, sidePicks: SetOfficePoolSidePickItem[]): Promise<OfficePoolSidePickSummary[]> => {
+    const response = await api.post<OfficePoolSidePickSummary[]>(`/office-pools/${id}/side-picks`, { sidePicks });
     return response.data;
   },
 

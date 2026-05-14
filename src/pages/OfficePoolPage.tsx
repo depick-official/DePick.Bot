@@ -7,8 +7,10 @@ import {
   CreateOfficePoolRequest,
   OfficePoolLeaderboardResponse,
   OfficePoolMemberSummary,
+  OfficePoolMode,
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
+  OfficePoolSidePickSummary,
   OfficePoolSummary,
 } from '../types/OfficePool';
 import '../styles/pages.scss';
@@ -38,18 +40,19 @@ interface TelegramWebAppState {
   startParam?: string;
 }
 
-interface DateParts {
-  year: string;
-  month: string;
-  day: string;
+interface WorldCupModeConfig {
+  mode: OfficePoolMode;
+  title: string;
+  badge: string;
+  description: string;
+  championLabel: string;
+  startsAt: string;
+  endsAt: string;
 }
+
+const CHAMPION_SIDE_PICK_KEY = 'CHAMPION';
 
 type Screen = 'home' | 'create' | 'detail' | 'picks';
-
-function toDateInput(value: Date) {
-  const pad = (num: number) => String(num).padStart(2, '0');
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-}
 
 function startOfDayIso(value: string) {
   const date = new Date(`${value}T00:00:00`);
@@ -61,30 +64,30 @@ function endOfDayIso(value: string) {
   return date.toISOString();
 }
 
-function parseDateParts(value: string): DateParts {
-  const [year = '', month = '', day = ''] = value.split('-');
-  return { year, month, day };
-}
+const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
+  {
+    mode: 'WORLD_CUP_GROUP_STAGE',
+    title: 'World Cup Group Stage',
+    badge: 'Incoming',
+    description: 'Play the 2026 World Cup opening phase with group-stage match picks and an early champion pick.',
+    championLabel: 'Champion pick opens the pool. Group qualifiers will replace this with a fuller flow later.',
+    startsAt: '2026-06-11',
+    endsAt: '2026-06-27',
+  },
+  {
+    mode: 'WORLD_CUP_KNOCKOUT_STAGE',
+    title: 'World Cup Knockout Stage',
+    badge: 'Incoming',
+    description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and later podium picks.',
+    championLabel: 'Champion pick is kept for the join flow now. Later this becomes top 1, 2, 3.',
+    startsAt: '2026-06-28',
+    endsAt: '2026-07-19',
+  },
+];
 
-function buildDateFromParts(parts: DateParts): string {
-  const fallback = toDateInput(new Date());
-  if (!parts.year || !parts.month || !parts.day) {
-    return fallback;
-  }
-
-  const maxDay = getDaysInMonth(Number(parts.year), Number(parts.month));
-  const safeDay = Math.min(Number(parts.day), maxDay);
-  const date = new Date(Number(parts.year), Number(parts.month) - 1, safeDay);
-  return toDateInput(date);
-}
-
-function getDaysInMonth(year: number, month: number) {
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
-    return 31;
-  }
-
-  return new Date(year, month, 0).getDate();
-}
+const WORLD_CUP_MODE_CONFIG_MAP = Object.fromEntries(
+  WORLD_CUP_MODE_CONFIG.map((item) => [item.mode, item]),
+) as Record<OfficePoolMode, WorldCupModeConfig>;
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -92,6 +95,15 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })}`;
+}
+
+function formatDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  return date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getModeLabel(mode: OfficePoolMode) {
+  return WORLD_CUP_MODE_CONFIG_MAP[mode]?.title ?? mode;
 }
 
 function getPickLabel(option: OfficePoolPickOption) {
@@ -131,6 +143,10 @@ function buildChampionTeams(predictions: OfficePoolPredictionSummary[]): TeamOpt
     }
   });
   return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getChampionSidePick(sidePicks: OfficePoolSidePickSummary[]) {
+  return sidePicks.find((sidePick) => sidePick.type === 'CHAMPION' && sidePick.key === CHAMPION_SIDE_PICK_KEY) ?? null;
 }
 
 function getTelegramAuthQueryData(searchParams: URLSearchParams): TelegramAuthQueryData | null {
@@ -202,8 +218,8 @@ export default function OfficePoolPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>('home');
+  const [authReady, setAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [poolLoading, setPoolLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -217,16 +233,18 @@ export default function OfficePoolPage() {
   const [predictions, setPredictions] = useState<OfficePoolPredictionSummary[]>([]);
   const [leaderboard, setLeaderboard] = useState<OfficePoolLeaderboardResponse | null>(null);
   const [picks, setPicks] = useState<Record<string, OfficePoolPickOption>>({});
+  const [sidePicks, setSidePicks] = useState<OfficePoolSidePickSummary[]>([]);
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [selectedChampionPick, setSelectedChampionPick] = useState('');
+  const [confirmedChampionPickId, setConfirmedChampionPickId] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(tokenUtils.getToken());
 
   const [createName, setCreateName] = useState('');
-  const [createTournament, setCreateTournament] = useState('WORLD_CUP');
-  const [createSeasonKey, setCreateSeasonKey] = useState('');
-  const [createStart, setCreateStart] = useState(toDateInput(new Date()));
-  const [createEnd, setCreateEnd] = useState(toDateInput(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)));
+  const [createMode, setCreateMode] = useState<OfficePoolMode>('WORLD_CUP_GROUP_STAGE');
   const [createEntryFee, setCreateEntryFee] = useState('10');
+  const [createSubmitAttempted, setCreateSubmitAttempted] = useState(false);
+  const [createNameTouched, setCreateNameTouched] = useState(false);
+  const [createEntryFeeTouched, setCreateEntryFeeTouched] = useState(false);
 
   const authToken = searchParams.get('auth_token');
   const telegramAuthQueryData = useMemo(() => getTelegramAuthQueryData(searchParams), [searchParams]);
@@ -266,32 +284,31 @@ export default function OfficePoolPage() {
     return counts;
   }, [leaderboard]);
 
-  const createStartParts = useMemo(() => parseDateParts(createStart), [createStart]);
-  const createEndParts = useMemo(() => parseDateParts(createEnd), [createEnd]);
-  const yearOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    return Array.from({ length: 6 }, (_, index) => String(currentYear - 1 + index));
-  }, []);
-  const monthOptions = useMemo(
-    () => Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0')),
-    [],
-  );
-  const startDayOptions = useMemo(
-    () =>
-      Array.from(
-        { length: getDaysInMonth(Number(createStartParts.year), Number(createStartParts.month)) },
-        (_, index) => String(index + 1).padStart(2, '0'),
-      ),
-    [createStartParts.month, createStartParts.year],
-  );
-  const endDayOptions = useMemo(
-    () =>
-      Array.from(
-        { length: getDaysInMonth(Number(createEndParts.year), Number(createEndParts.month)) },
-        (_, index) => String(index + 1).padStart(2, '0'),
-      ),
-    [createEndParts.month, createEndParts.year],
-  );
+  const createModeConfig = WORLD_CUP_MODE_CONFIG_MAP[createMode];
+  const createStart = createModeConfig.startsAt;
+  const createEnd = createModeConfig.endsAt;
+
+  const createNameError = useMemo(() => {
+    if (!createSubmitAttempted && !createNameTouched) return null;
+    return createName.trim() ? null : 'Pool name is required.';
+  }, [createName, createNameTouched, createSubmitAttempted]);
+  const createEntryFeeError = useMemo(() => {
+    if (!createSubmitAttempted && !createEntryFeeTouched) return null;
+    const value = Number(createEntryFee);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 'Minimum entry fee must be greater than 0 PICK.';
+    }
+    return null;
+  }, [createEntryFee, createEntryFeeTouched, createSubmitAttempted]);
+  const createWindowDays = useMemo(() => {
+    const start = new Date(startOfDayIso(createStart));
+    const end = new Date(endOfDayIso(createEnd));
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      return null;
+    }
+    return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  }, [createEnd, createStart]);
+  const createWindowLabel = `${formatDate(createStart)} - ${formatDate(createEnd)}`;
 
   useEffect(() => {
     const telegramWebApp = (globalThis as any).Telegram?.WebApp;
@@ -300,52 +317,43 @@ export default function OfficePoolPage() {
   }, []);
 
   useEffect(() => {
-    const bootstrapOfficePool = async () => {
+    let cancelled = false;
+
+    const resolveOfficePoolSession = async () => {
       try {
-        setIsLoading(true);
         setError(null);
 
-        let nextToken = sessionToken;
+        let nextToken = tokenUtils.getToken();
         const requiresScopedTelegramAuth = isScopedLaunch;
 
         if (authToken) {
           tokenUtils.setToken(authToken, 'TELEGRAM');
           nextToken = authToken;
-          setSessionToken(authToken);
         } else if (telegramAuthQueryData) {
           const authResponse = await telegramAuthApi.verify(telegramAuthQueryData);
           tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
           nextToken = authResponse.auth_token;
-          setSessionToken(authResponse.auth_token);
         } else if (telegramWebAppState.initData) {
           const authResponse = await telegramAuthApi.verifyMiniApp({ initData: telegramWebAppState.initData });
           tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
           nextToken = authResponse.auth_token;
-          setSessionToken(authResponse.auth_token);
         } else if (requiresScopedTelegramAuth) {
           tokenUtils.removeToken();
-          setSessionToken(null);
           throw new Error('Missing Telegram Mini App session. Re-open Office Pool from Telegram.');
         } else if (!tokenUtils.isTokenValid()) {
           throw new Error('Missing authentication token');
         } else {
           nextToken = tokenUtils.getToken();
-          setSessionToken(nextToken);
         }
 
         if (!nextToken) {
           throw new Error('Missing authentication token');
         }
 
-        const [mine, all] = await Promise.all([
-          officePoolApi.listMine(),
-          isScopedLaunch
-            ? officePoolApi.list({ scopeProvider, scopeExternalId })
-            : Promise.resolve([]),
-        ]);
+        if (cancelled) return;
 
-        setMyPools(mine);
-        setAllPools(all);
+        setSessionToken((current) => (current === nextToken ? current : nextToken));
+        setAuthReady(true);
 
         if (authToken || telegramAuthQueryData || telegramWebAppState.initData) {
           navigate(
@@ -357,60 +365,106 @@ export default function OfficePoolPage() {
           );
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load office pools:', err);
         setError(err instanceof Error ? err.message : 'Failed to load office pools');
-      } finally {
+        setSessionToken(null);
+        setAuthReady(true);
         setIsLoading(false);
       }
     };
 
-    void bootstrapOfficePool();
+    void resolveOfficePoolSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     authToken,
     isScopedLaunch,
     navigate,
     scopeExternalId,
     scopeProvider,
-    sessionToken,
     telegramAuthQueryData,
     telegramWebAppState.initData,
   ]);
+
+  useEffect(() => {
+    if (!authReady || !sessionToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshOfficePoolHome = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const [mine, all] = await Promise.all([
+          officePoolApi.listMine(),
+          isScopedLaunch
+            ? officePoolApi.list({ scopeProvider, scopeExternalId })
+            : Promise.resolve([]),
+        ]);
+
+        if (cancelled) return;
+
+        setMyPools(mine);
+        setAllPools(all);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to refresh office pools:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load office pools');
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void refreshOfficePoolHome();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, isScopedLaunch, scopeExternalId, scopeProvider, sessionToken]);
 
   useEffect(() => {
     if (!activePoolId || (screen !== 'detail' && screen !== 'picks')) return;
 
     const loadPoolContext = async () => {
       try {
-        setPoolLoading(true);
         setError(null);
-        setActivePool(null);
         const pool = await officePoolApi.getById(activePoolId);
 
         setActivePool(pool);
 
         if (pool.isMember) {
-          const [nextPredictions, nextMembers, nextLeaderboard, nextPicks] = await Promise.all([
+          const [nextPredictions, nextMembers, nextLeaderboard, nextPicks, nextSidePicks] = await Promise.all([
             officePoolApi.getPredictions(activePoolId),
             officePoolApi.getMembers(activePoolId),
             officePoolApi.getLeaderboard(activePoolId),
             officePoolApi.getPicks(activePoolId).catch(() => ({})),
+            officePoolApi.getSidePicks(activePoolId).catch(() => []),
           ]);
           setPredictions(nextPredictions);
           setMembers(nextMembers);
           setLeaderboard(nextLeaderboard);
           setPicks(nextPicks);
+          setSidePicks(nextSidePicks);
         } else {
           const nextPredictions = await officePoolApi.getPredictions(activePoolId).catch(() => []);
           setPredictions(nextPredictions);
           setMembers([]);
           setLeaderboard(null);
           setPicks({});
+          setSidePicks([]);
         }
       } catch (err) {
         console.error('Failed to load office pool details:', err);
         setError('Failed to load office pool details');
       } finally {
-        setPoolLoading(false);
       }
     };
 
@@ -418,9 +472,17 @@ export default function OfficePoolPage() {
   }, [activePoolId, poolReloadToken, screen]);
 
   useEffect(() => {
+    const championSidePick = getChampionSidePick(sidePicks);
+    if (championSidePick) {
+      setSelectedChampionPick(championSidePick.teamId);
+      setConfirmedChampionPickId(championSidePick.teamId);
+      return;
+    }
+
     if (!myMember?.championPickTeamId) return;
     setSelectedChampionPick(myMember.championPickTeamId);
-  }, [myMember?.championPickTeamId]);
+    setConfirmedChampionPickId(myMember.championPickTeamId);
+  }, [myMember?.championPickTeamId, sidePicks]);
 
   const refreshHome = async () => {
     const [mine, all] = await Promise.all([
@@ -440,10 +502,11 @@ export default function OfficePoolPage() {
   };
 
   const openPool = (poolId: string, nextScreen: Screen = 'detail') => {
-    setActivePool(null);
     setActivePoolId(poolId);
     setPoolReloadToken((current) => current + 1);
     setSelectedChampionPick('');
+    setConfirmedChampionPickId(null);
+    setSidePicks([]);
     setScreen(nextScreen);
     setError(null);
   };
@@ -468,14 +531,23 @@ export default function OfficePoolPage() {
       setError(null);
       setNotice(null);
       setIsSaving(true);
+      setCreateSubmitAttempted(true);
+      const trimmedName = createName.trim();
       const entryFee = Number(createEntryFee);
+      if (!trimmedName) {
+        throw new Error('Pool name is required');
+      }
       if (!Number.isFinite(entryFee) || entryFee <= 0) {
-        throw new Error('Minimum PICK entry fee must be greater than 0');
+        throw new Error('Minimum entry fee must be greater than 0 PICK');
+      }
+      if (new Date(startOfDayIso(createStart)) >= new Date(endOfDayIso(createEnd))) {
+        throw new Error('End date must be after the start date');
       }
       const payload: CreateOfficePoolRequest = {
-        name: createName.trim(),
-        tournament: createTournament,
-        seasonKey: createSeasonKey.trim() || undefined,
+        name: trimmedName,
+        mode: createMode,
+        tournament: 'WORLD_CUP',
+        seasonKey: '2026',
         startsAt: startOfDayIso(createStart),
         endsAt: endOfDayIso(createEnd),
         scopeProvider,
@@ -485,8 +557,11 @@ export default function OfficePoolPage() {
 
       const pool = await officePoolApi.create(payload);
       setCreateName('');
-      setCreateSeasonKey('');
+      setCreateMode('WORLD_CUP_GROUP_STAGE');
       setCreateEntryFee('10');
+      setCreateSubmitAttempted(false);
+      setCreateNameTouched(false);
+      setCreateEntryFeeTouched(false);
       openPool(pool.id, 'detail');
       setNotice(`Created ${pool.name}. Set your champion pick next.`);
       refreshHomeInBackground();
@@ -519,41 +594,31 @@ export default function OfficePoolPage() {
     }
   };
 
-  const applyCreateDatePreset = (days: number) => {
-    const start = new Date();
-    const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    setCreateStart(toDateInput(start));
-    setCreateEnd(toDateInput(end));
-  };
-
-  const updateCreateDate = (target: 'start' | 'end', nextParts: Partial<DateParts>) => {
-    const currentParts = target === 'start' ? createStartParts : createEndParts;
-    const merged = {
-      ...currentParts,
-      ...nextParts,
-    };
-    const nextValue = buildDateFromParts(merged);
-
-    if (target === 'start') {
-      setCreateStart(nextValue);
-      return;
-    }
-
-    setCreateEnd(nextValue);
-  };
-
   const handleSetChampionPick = async () => {
     if (!activePool || !selectedChampionPick) return;
     try {
       setIsSaving(true);
       setError(null);
       setNotice(null);
-      await officePoolApi.setChampionPick(activePool.id, selectedChampionPick);
+      const savedSidePicks = await officePoolApi.saveSidePicks(activePool.id, [
+        {
+          type: 'CHAMPION',
+          key: CHAMPION_SIDE_PICK_KEY,
+          teamId: selectedChampionPick,
+        },
+      ]);
+      const championSidePick = getChampionSidePick(savedSidePicks);
+      const savedPickId = championSidePick?.teamId ?? selectedChampionPick;
+      setSidePicks(savedSidePicks);
+      setConfirmedChampionPickId(savedPickId);
+      setSelectedChampionPick(savedPickId);
       const [nextMembers, nextLeaderboard] = await Promise.all([
-        officePoolApi.getMembers(activePool.id),
+        officePoolApi.getMembers(activePool.id).catch(() => null),
         officePoolApi.getLeaderboard(activePool.id),
       ]);
-      setMembers(nextMembers);
+      if (nextMembers) {
+        setMembers(nextMembers);
+      }
       setLeaderboard(nextLeaderboard);
       setNotice('Champion pick saved');
     } catch (err: any) {
@@ -621,7 +686,7 @@ export default function OfficePoolPage() {
             <div>
               <div className="office-pool-eyebrow">DePick - Office Pools</div>
               <h2>{isScopedLaunch ? 'Play your pool with your friends' : 'Your joined office pools'}</h2>
-              <p>{isScopedLaunch ? 'Create a pool, pick a champion, then submit your match picks.' : 'Open a pool you already joined from Telegram group chat.'}</p>
+              <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with a champion pick.' : 'Open a pool you already joined from Telegram group chat.'}</p>
             </div>
             {isScopedLaunch ? (
               <button className="predict-button office-pool-cta" onClick={() => setScreen('create')}>
@@ -657,7 +722,7 @@ export default function OfficePoolPage() {
           {isScopedLaunch ? (
             <PoolListSection
               title="This Group"
-              subtitle="Pools already attached to this Telegram group"
+              subtitle="Pools in this Telegram group that you have not joined yet"
               pools={discoverPools}
               emptyMessage="No other office pools have been started in this Telegram group yet."
               onOpen={(pool) => openPool(pool.id)}
@@ -675,65 +740,65 @@ export default function OfficePoolPage() {
           <section className="office-pool-panel">
             <h2>Pool Setup</h2>
             <div className="office-pool-form">
-              <input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Pool name" />
-              <select value={createTournament} onChange={(e) => setCreateTournament(e.target.value)}>
-                <option value="WORLD_CUP">World Cup</option>
-                <option value="PREMIER_LEAGUE">Premier League</option>
-                <option value="LA_LIGA">La Liga</option>
-                <option value="INTERNATIONAL_FRIENDLIES">International Friendlies</option>
-              </select>
-              <input value={createSeasonKey} onChange={(e) => setCreateSeasonKey(e.target.value)} placeholder="Season key (optional)" />
-              <div className="office-pool-date-preset-row">
-                <button type="button" className="office-pool-date-chip" onClick={() => applyCreateDatePreset(7)}>7 days</button>
-                <button type="button" className="office-pool-date-chip" onClick={() => applyCreateDatePreset(14)}>2 weeks</button>
-                <button type="button" className="office-pool-date-chip" onClick={() => applyCreateDatePreset(30)}>1 month</button>
+              <input
+                value={createName}
+                onChange={(e) => {
+                  setCreateName(e.target.value);
+                  setCreateNameTouched(true);
+                }}
+                onBlur={() => setCreateNameTouched(true)}
+                placeholder="Pool name"
+              />
+              {createNameError ? <p className="office-pool-field-error">{createNameError}</p> : null}
+              <div className="office-pool-mode-grid">
+                {WORLD_CUP_MODE_CONFIG.map((mode) => (
+                  <button
+                    key={mode.mode}
+                    type="button"
+                    className={`office-pool-mode-card ${createMode === mode.mode ? 'office-pool-mode-card-active' : ''}`}
+                    onClick={() => setCreateMode(mode.mode)}
+                  >
+                    <div className="office-pool-mode-head">
+                      <strong>{mode.title}</strong>
+                      <span>{mode.badge}</span>
+                    </div>
+                    <p>{mode.description}</p>
+                    <div className="office-pool-mode-meta">
+                      <span>{formatDate(mode.startsAt)} - {formatDate(mode.endsAt)}</span>
+                    </div>
+                  </button>
+                ))}
               </div>
               <label>
-                <span>Start date</span>
-                <div className="office-pool-date-select-row">
-                  <select value={createStartParts.month} onChange={(e) => updateCreateDate('start', { month: e.target.value })}>
-                    {monthOptions.map((month) => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                  <select value={createStartParts.day} onChange={(e) => updateCreateDate('start', { day: e.target.value })}>
-                    {startDayOptions.map((day) => (
-                      <option key={day} value={day}>{day}</option>
-                    ))}
-                  </select>
-                  <select value={createStartParts.year} onChange={(e) => updateCreateDate('start', { year: e.target.value })}>
-                    {yearOptions.map((year) => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-              <label>
-                <span>End date</span>
-                <div className="office-pool-date-select-row">
-                  <select value={createEndParts.month} onChange={(e) => updateCreateDate('end', { month: e.target.value })}>
-                    {monthOptions.map((month) => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                  <select value={createEndParts.day} onChange={(e) => updateCreateDate('end', { day: e.target.value })}>
-                    {endDayOptions.map((day) => (
-                      <option key={day} value={day}>{day}</option>
-                    ))}
-                  </select>
-                  <select value={createEndParts.year} onChange={(e) => updateCreateDate('end', { year: e.target.value })}>
-                    {yearOptions.map((year) => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-              <label>
                 <span>Minimum entry fee (PICK)</span>
-                <input type="number" min="1" step="1" value={createEntryFee} onChange={(e) => setCreateEntryFee(e.target.value)} placeholder="10" />
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={createEntryFee}
+                  onChange={(e) => {
+                    setCreateEntryFee(e.target.value);
+                    setCreateEntryFeeTouched(true);
+                  }}
+                  onBlur={() => setCreateEntryFeeTouched(true)}
+                  placeholder="10"
+                />
               </label>
-              <p className="office-pool-copy">Every player pays at least this many PICK to enter, so the prize pool grows as more friends join.</p>
-              <button className="predict-button" onClick={handleCreatePool} disabled={!createName.trim() || isSaving}>
+              {createEntryFeeError ? <p className="office-pool-field-error">{createEntryFeeError}</p> : null}
+              <div className="office-pool-form-summary">
+                <p className="office-pool-copy">
+                  <strong>{createModeConfig.title}</strong>
+                  {' · '}
+                  {createWindowLabel}
+                </p>
+                <p className="office-pool-copy">{createModeConfig.championLabel}</p>
+                <p className="office-pool-copy">Every player pays at least this many PICK to enter, so the prize pool grows as more friends join.</p>
+                <p className="office-pool-copy">
+                  Creating the pool is free for the group creator. You only pay when you join as a player.
+                  {createWindowDays ? ` Pool window: ${createWindowDays} day${createWindowDays > 1 ? 's' : ''}.` : ''}
+                </p>
+              </div>
+              <button className="predict-button" onClick={handleCreatePool} disabled={isSaving}>
                 {isSaving ? 'Creating...' : 'Create Pool'}
               </button>
             </div>
@@ -751,7 +816,7 @@ export default function OfficePoolPage() {
           {notice && <div className="office-pool-notice">{notice}</div>}
           {error && <div className="office-pool-error">{error}</div>}
 
-          {poolLoading || !activePool ? (
+          {!activePool || activePool.id !== activePoolId ? (
             <div className="loading">Loading pool...</div>
           ) : (
             <>
@@ -760,7 +825,7 @@ export default function OfficePoolPage() {
                   <section className="office-pool-panel">
                     <div className="office-pool-panel-head">
                       <div>
-                        <div className="office-pool-eyebrow">{activePool.tournament}</div>
+                        <div className="office-pool-eyebrow">{getModeLabel(activePool.mode)}</div>
                         <h2>{activePool.name}</h2>
                       </div>
                       {activePool.isMember && (
@@ -775,6 +840,7 @@ export default function OfficePoolPage() {
                       <div><span>Joined</span><strong>{activePool.participants} players</strong></div>
                       <div><span>Minimum entry</span><strong>{activePool.entryFee} PICK</strong></div>
                       <div><span>Window</span><strong>{formatDateTime(activePool.startsAt)} - {formatDateTime(activePool.endsAt)}</strong></div>
+                      <div><span>Format</span><strong>{getModeLabel(activePool.mode)}</strong></div>
                       <div><span>Scope</span><strong>{activePool.scopeExternalId ?? 'General'}</strong></div>
                     </div>
                   </section>
@@ -782,7 +848,7 @@ export default function OfficePoolPage() {
                   {!activePool.isMember ? (
                     <section className="office-pool-panel">
                       <h2>Join Pool</h2>
-                      <p className="office-pool-copy">Pick your tournament champion before you enter the pool.</p>
+                      <p className="office-pool-copy">Set your champion pick before you enter the pool. We will keep calling it champion pick in the join flow, even while World Cup side-picks expand later.</p>
                       <ChampionPicker
                         teams={championTeams}
                         selectedTeamId={selectedChampionPick}
@@ -802,14 +868,19 @@ export default function OfficePoolPage() {
                         <div className="office-pool-entry-card">
                           <div>
                             <span className="office-pool-copy-label">Champion Pick</span>
-                            <strong>{myMember?.championPickTeamName ?? 'Not chosen yet'}</strong>
+                            <strong>
+                              {myMember?.championPickTeamName
+                                ?? (confirmedChampionPickId
+                                  ? (championTeams.find((t) => t.id === confirmedChampionPickId)?.name ?? 'Saved')
+                                  : 'Not chosen yet')}
+                            </strong>
                           </div>
                           <div>
                             <span className="office-pool-copy-label">Invite</span>
                             <strong>{activePool.inviteCode}</strong>
                           </div>
                         </div>
-                        {myMember?.championPickTeamId ? (
+                        {(confirmedChampionPickId || myMember?.championPickTeamId) ? (
                           <p className="office-pool-copy">
                             Your champion pick is locked in for this pool. Correct pick earns +{leaderboard?.championBonusPoints ?? 5} points when the winner is known.
                           </p>
@@ -1020,12 +1091,12 @@ function PoolListSection({
                 <span>{pool.status}</span>
               </div>
               <div className="office-pool-card-meta">
-                <span>{pool.tournament}</span>
+                <span>{getModeLabel(pool.mode)}</span>
                 <span>{pool.participants} players joined</span>
               </div>
               <div className="office-pool-card-meta">
                 <span>{pool.entryFee} PICK min</span>
-                <span>{pool.isMember ? 'Joined' : 'Open'}</span>
+                <span>{pool.isCreator ? 'Creator' : pool.isMember ? 'Joined' : 'Open'}</span>
               </div>
             </button>
           ))}

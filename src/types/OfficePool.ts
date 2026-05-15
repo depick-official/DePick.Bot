@@ -3,6 +3,7 @@ export type OfficePoolAccessPolicy = 'INVITE_LOCK' | 'OPEN';
 export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY';
 export type OfficePoolMode = 'WORLD_CUP_GROUP_STAGE' | 'WORLD_CUP_KNOCKOUT_STAGE';
 export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
+export type OfficePoolSettlementStatus = 'NOT_READY' | 'READY' | 'NO_PAID_ENTRIES' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
 
 export interface OfficePoolSummary {
   id: string;
@@ -44,6 +45,7 @@ export interface CreateOfficePoolRequest {
 export interface JoinOfficePoolRequest {
   inviteCode?: string;
   championPickTeamId?: string;
+  sidePicks?: SetOfficePoolSidePickItem[];
 }
 
 export interface OfficePoolMemberSummary {
@@ -91,6 +93,8 @@ export interface OfficePoolLeaderboardEntry {
   avatarSnapshot?: string | null;
   points: number;
   correctPicks: number;
+  matchPoints: number;
+  sidePickPoints: number;
   championBonusPoints: number;
   championPickTeamId?: string | null;
   championPickTeamName?: string | null;
@@ -106,8 +110,11 @@ export interface OfficePoolLeaderboardResponse {
   championBonusPoints: number;
   championWinnerTeamId?: string | null;
   championWinnerTeamName?: string | null;
+  resolvedSidePicks: OfficePoolSidePickSummary[];
   totalPrizePool: number;
   payoutResolved: boolean;
+  settlementReady: boolean;
+  settlementStatus: OfficePoolSettlementStatus;
 }
 
 export interface OfficePoolJoinResponse {

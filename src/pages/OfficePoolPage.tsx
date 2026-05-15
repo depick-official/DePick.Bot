@@ -1,23 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
-import { officePoolApi, telegramAuthApi } from '../services/api';
-import { tokenUtils } from '../utils/token';
+import { useEffect, useMemo } from 'react';
 import {
-  CreateOfficePoolRequest,
-  OfficePoolLeaderboardResponse,
-  OfficePoolMemberSummary,
   OfficePoolMode,
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
+  OfficePoolSettlementStatus,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
 } from '../types/OfficePool';
+import { PODIUM_KEYS, PodiumKey, useOfficePoolPageData } from './useOfficePoolPageData';
 import '../styles/pages.scss';
-
-interface DecodedToken {
-  sub?: string;
-}
 
 interface TeamOption {
   id: string;
@@ -25,19 +16,10 @@ interface TeamOption {
   logo: string;
 }
 
-interface TelegramAuthQueryData {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
-}
-
-interface TelegramWebAppState {
-  initData?: string;
-  startParam?: string;
+interface GroupQualifierCard {
+  groupKey: string;
+  label: string;
+  teams: TeamOption[];
 }
 
 interface WorldCupModeConfig {
@@ -45,43 +27,57 @@ interface WorldCupModeConfig {
   title: string;
   badge: string;
   description: string;
-  championLabel: string;
+  championPickLabel: string;
   startsAt: string;
   endsAt: string;
+  isLocked?: boolean;
+  lockedMessage?: string;
 }
 
-const CHAMPION_SIDE_PICK_KEY = 'CHAMPION';
-
-type Screen = 'home' | 'create' | 'detail' | 'picks';
-
 function startOfDayIso(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return date.toISOString();
+  return `${value}T00:00:00.000Z`;
 }
 
 function endOfDayIso(value: string) {
-  const date = new Date(`${value}T23:59:59`);
-  return date.toISOString();
+  return `${value}T23:59:59.999Z`;
 }
+
+const utcDateFormatter = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+const utcDateTimeFormatter = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'UTC',
+  timeZoneName: 'short',
+});
 
 const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
   {
     mode: 'WORLD_CUP_GROUP_STAGE',
     title: 'World Cup Group Stage',
     badge: 'Incoming',
-    description: 'Play the 2026 World Cup opening phase with group-stage match picks and an early champion pick.',
-    championLabel: 'Champion pick opens the pool. Group qualifiers will replace this with a fuller flow later.',
+    description: 'Play the 2026 World Cup opening phase with group-stage match picks and top-2 qualifiers for every group.',
+    championPickLabel: 'Players choose Champion Picks for 1st and 2nd place in each group before joining. Those Champion Picks lock immediately after join.',
     startsAt: '2026-06-11',
     endsAt: '2026-06-27',
   },
   {
     mode: 'WORLD_CUP_KNOCKOUT_STAGE',
     title: 'World Cup Knockout Stage',
-    badge: 'Incoming',
-    description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and later podium picks.',
-    championLabel: 'Champion pick is kept for the join flow now. Later this becomes top 1, 2, 3.',
-    startsAt: '2026-06-28',
+    badge: 'Locked',
+    description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and final podium selections.',
+    championPickLabel: 'Players choose Champion Picks for 1st, 2nd, and 3rd before joining. Those Champion Picks lock immediately after join.',
+    startsAt: '2026-06-29',
     endsAt: '2026-07-19',
+    isLocked: true,
+    lockedMessage: 'Starts Jun 29',
   },
 ];
 
@@ -91,15 +87,11 @@ const WORLD_CUP_MODE_CONFIG_MAP = Object.fromEntries(
 
 function formatDateTime(value: string) {
   const date = new Date(value);
-  return `${date.toLocaleDateString('en', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('en', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
+  return utcDateTimeFormatter.format(date);
 }
 
 function formatDate(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+  return utcDateFormatter.format(new Date(startOfDayIso(value)));
 }
 
 function getModeLabel(mode: OfficePoolMode) {
@@ -124,7 +116,7 @@ function pickFromResult(result: string): OfficePoolPickOption | null {
   return null;
 }
 
-function buildChampionTeams(predictions: OfficePoolPredictionSummary[]): TeamOption[] {
+function buildTeamOptions(predictions: OfficePoolPredictionSummary[]): TeamOption[] {
   const byId = new Map<string, TeamOption>();
   predictions.forEach((match) => {
     if (!byId.has(match.homeTeamId)) {
@@ -145,136 +137,330 @@ function buildChampionTeams(predictions: OfficePoolPredictionSummary[]): TeamOpt
   return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function getChampionSidePick(sidePicks: OfficePoolSidePickSummary[]) {
-  return sidePicks.find((sidePick) => sidePick.type === 'CHAMPION' && sidePick.key === CHAMPION_SIDE_PICK_KEY) ?? null;
+function buildGroupQualifierCards(predictions: OfficePoolPredictionSummary[]): GroupQualifierCard[] {
+  const teamById = new Map<string, TeamOption>();
+  const adjacency = new Map<string, Set<string>>();
+
+  predictions.forEach((match) => {
+    if (!teamById.has(match.homeTeamId)) {
+      teamById.set(match.homeTeamId, {
+        id: match.homeTeamId,
+        name: match.homeTeamName,
+        logo: match.homeTeamLogo,
+      });
+    }
+    if (!teamById.has(match.awayTeamId)) {
+      teamById.set(match.awayTeamId, {
+        id: match.awayTeamId,
+        name: match.awayTeamName,
+        logo: match.awayTeamLogo,
+      });
+    }
+
+    if (!adjacency.has(match.homeTeamId)) {
+      adjacency.set(match.homeTeamId, new Set());
+    }
+    if (!adjacency.has(match.awayTeamId)) {
+      adjacency.set(match.awayTeamId, new Set());
+    }
+    adjacency.get(match.homeTeamId)?.add(match.awayTeamId);
+    adjacency.get(match.awayTeamId)?.add(match.homeTeamId);
+  });
+
+  const visited = new Set<string>();
+  const components: Array<{ teams: TeamOption[]; firstMatchAt: number; sortKey: string }> = [];
+
+  adjacency.forEach((_, teamId) => {
+    if (visited.has(teamId)) {
+      return;
+    }
+
+    const queue = [teamId];
+    const teamIds: string[] = [];
+    visited.add(teamId);
+
+    while (queue.length > 0) {
+      const currentTeamId = queue.shift()!;
+      teamIds.push(currentTeamId);
+
+      (adjacency.get(currentTeamId) ?? new Set<string>()).forEach((neighbour) => {
+        if (visited.has(neighbour)) {
+          return;
+        }
+        visited.add(neighbour);
+        queue.push(neighbour);
+      });
+    }
+
+    const teams = teamIds
+      .map((currentTeamId) => teamById.get(currentTeamId))
+      .filter((team): team is TeamOption => !!team)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const teamIdSet = new Set(teamIds);
+    const firstMatchAt = predictions
+      .filter((match) => teamIdSet.has(match.homeTeamId) || teamIdSet.has(match.awayTeamId))
+      .reduce((min, match) => Math.min(min, new Date(match.datetime).getTime()), Number.POSITIVE_INFINITY);
+
+    components.push({
+      teams,
+      firstMatchAt,
+      sortKey: teams.map((team) => team.name).join('|'),
+    });
+  });
+
+  return components
+    .sort((a, b) => {
+      if (a.firstMatchAt !== b.firstMatchAt) {
+        return a.firstMatchAt - b.firstMatchAt;
+      }
+      return a.sortKey.localeCompare(b.sortKey);
+    })
+    .map((component, index) => ({
+      groupKey: `GROUP_${String.fromCharCode(65 + index)}`,
+      label: `Group ${String.fromCharCode(65 + index)}`,
+      teams: component.teams,
+    }));
 }
 
-function getTelegramAuthQueryData(searchParams: URLSearchParams): TelegramAuthQueryData | null {
-  const id = searchParams.get('id');
-  const firstName = searchParams.get('first_name');
-  const authDate = searchParams.get('auth_date');
-  const hash = searchParams.get('hash');
-
-  if (!id || !firstName || !authDate || !hash) {
-    return null;
-  }
-
-  return {
-    id: Number(id),
-    first_name: firstName,
-    last_name: searchParams.get('last_name') ?? undefined,
-    username: searchParams.get('username') ?? undefined,
-    photo_url: searchParams.get('photo_url') ?? undefined,
-    auth_date: Number(authDate),
-    hash,
-  };
+function getSidePickTeamName(sidePicks: OfficePoolSidePickSummary[], type: string, key: string) {
+  return sidePicks.find((sidePick) => sidePick.type === type && sidePick.key === key)?.teamName ?? null;
 }
 
-function buildOfficePoolSearch(scopeProvider?: string, scopeExternalId?: string) {
-  const nextParams = new URLSearchParams();
-  if (scopeProvider) {
-    nextParams.set('scope_provider', scopeProvider);
+function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[], joinSidePickMap: Record<string, string>) {
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return groupCards.reduce((count, groupCard) => (
+      count
+      + (joinSidePickMap[`${groupCard.groupKey}_FIRST`] ? 1 : 0)
+      + (joinSidePickMap[`${groupCard.groupKey}_SECOND`] ? 1 : 0)
+    ), 0);
   }
-  if (scopeExternalId) {
-    nextParams.set('scope_external_id', scopeExternalId);
-  }
-  const nextQuery = nextParams.toString();
-  return nextQuery ? `?${nextQuery}` : '';
+
+  return PODIUM_KEYS.reduce((count, key) => count + (joinSidePickMap[key] ? 1 : 0), 0);
 }
 
-function getTelegramWebAppState(searchParams: URLSearchParams): TelegramWebAppState {
-  const telegramWebApp = (globalThis as any).Telegram?.WebApp;
-  const initData = typeof telegramWebApp?.initData === 'string' && telegramWebApp.initData.length > 0
-    ? telegramWebApp.initData
-    : undefined;
-  const startParamFromInit = typeof telegramWebApp?.initDataUnsafe?.start_param === 'string' && telegramWebApp.initDataUnsafe.start_param.length > 0
-    ? telegramWebApp.initDataUnsafe.start_param
-    : undefined;
-  const startParamFromQuery = searchParams.get('tgWebAppStartParam') ?? undefined;
+function getRequiredJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[]) {
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return groupCards.length * 2;
+  }
 
-  return {
-    initData,
-    startParam: startParamFromInit ?? startParamFromQuery,
-  };
+  return PODIUM_KEYS.length;
 }
 
-function parseOfficePoolScopeFromStartParam(startParam?: string) {
-  if (!startParam || !startParam.startsWith('officepool_')) {
-    return { scopeProvider: undefined, scopeExternalId: undefined };
+function buildJoinSidePickPayload(
+  mode: OfficePoolMode,
+  groupCards: GroupQualifierCard[],
+  joinSidePickMap: Record<string, string>,
+) {
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return groupCards.flatMap((groupCard) => ([
+      {
+        type: 'GROUP_QUALIFIER' as const,
+        key: `${groupCard.groupKey}_FIRST`,
+        teamId: joinSidePickMap[`${groupCard.groupKey}_FIRST`],
+      },
+      {
+        type: 'GROUP_QUALIFIER' as const,
+        key: `${groupCard.groupKey}_SECOND`,
+        teamId: joinSidePickMap[`${groupCard.groupKey}_SECOND`],
+      },
+    ]));
   }
 
-  const scopeExternalId = startParam.slice('officepool_'.length);
-  if (!scopeExternalId) {
-    return { scopeProvider: undefined, scopeExternalId: undefined };
+  return PODIUM_KEYS.map((key) => ({
+    type: 'PODIUM' as const,
+    key,
+    teamId: joinSidePickMap[key],
+  }));
+}
+
+function getLockedSidePickTitle() {
+  return 'Champion Picks';
+}
+
+function getLockedSidePickLines(
+  mode: OfficePoolMode,
+  sidePicks: OfficePoolSidePickSummary[],
+  groupCards: GroupQualifierCard[],
+) {
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return groupCards
+      .map((groupCard) => {
+        const firstTeamName = getSidePickTeamName(sidePicks, 'GROUP_QUALIFIER', `${groupCard.groupKey}_FIRST`);
+        const secondTeamName = getSidePickTeamName(sidePicks, 'GROUP_QUALIFIER', `${groupCard.groupKey}_SECOND`);
+        if (!firstTeamName || !secondTeamName) {
+          return null;
+        }
+        return `${groupCard.label}: ${firstTeamName} / ${secondTeamName}`;
+      })
+      .filter((line): line is string => !!line);
   }
 
-  return {
-    scopeProvider: 'TELEGRAM',
-    scopeExternalId,
-  };
+  return PODIUM_KEYS
+    .map((key) => {
+      const teamName = getSidePickTeamName(sidePicks, 'PODIUM', key);
+      if (!teamName) {
+        return null;
+      }
+      const label = key === 'FIRST' ? '1st' : key === 'SECOND' ? '2nd' : '3rd';
+      return `${label}: ${teamName}`;
+    })
+    .filter((line): line is string => !!line);
+}
+
+function getSidePickComparisonLines(
+  mode: OfficePoolMode,
+  userSidePicks: OfficePoolSidePickSummary[],
+  resolvedSidePicks: OfficePoolSidePickSummary[],
+  groupCards: GroupQualifierCard[],
+) {
+  if (resolvedSidePicks.length === 0) {
+    return [];
+  }
+
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return groupCards
+      .map((groupCard) => {
+        const firstKey = `${groupCard.groupKey}_FIRST`;
+        const secondKey = `${groupCard.groupKey}_SECOND`;
+        const userFirst = getSidePickTeamName(userSidePicks, 'GROUP_QUALIFIER', firstKey);
+        const userSecond = getSidePickTeamName(userSidePicks, 'GROUP_QUALIFIER', secondKey);
+        const resolvedFirst = getSidePickTeamName(resolvedSidePicks, 'GROUP_QUALIFIER', firstKey);
+        const resolvedSecond = getSidePickTeamName(resolvedSidePicks, 'GROUP_QUALIFIER', secondKey);
+
+        if (!resolvedFirst || !resolvedSecond) {
+          return null;
+        }
+
+        const isCorrect = userFirst === resolvedFirst && userSecond === resolvedSecond;
+        return `${groupCard.label}: ${userFirst ?? '-'} / ${userSecond ?? '-'} · Actual: ${resolvedFirst} / ${resolvedSecond}${isCorrect ? ' · Correct' : ''}`;
+      })
+      .filter((line): line is string => !!line);
+  }
+
+  return PODIUM_KEYS
+    .map((key) => {
+      const label = key === 'FIRST' ? '1st' : key === 'SECOND' ? '2nd' : '3rd';
+      const userTeam = getSidePickTeamName(userSidePicks, 'PODIUM', key);
+      const resolvedTeam = getSidePickTeamName(resolvedSidePicks, 'PODIUM', key);
+      if (!resolvedTeam) {
+        return null;
+      }
+
+      const isCorrect = userTeam === resolvedTeam;
+      return `${label}: ${userTeam ?? '-'} · Actual: ${resolvedTeam}${isCorrect ? ' · Correct' : ''}`;
+    })
+    .filter((line): line is string => !!line);
+}
+
+function getSettlementCopy(status: OfficePoolSettlementStatus, totalPrizePool: number) {
+  switch (status) {
+    case 'READY':
+      return `All matches are settled. The pool creator can now queue the ${totalPrizePool} PICK payout.`;
+    case 'PENDING':
+      return 'Settlement has been triggered and payout transactions are currently processing.';
+    case 'COMPLETED':
+      return 'Settlement is complete and all payout transactions succeeded.';
+    case 'FAILED':
+      return 'Settlement was triggered, but payout transactions failed and need reconciliation.';
+    case 'PARTIAL':
+      return 'Some payout transactions succeeded while others still need retry or reconciliation.';
+    case 'NO_PAID_ENTRIES':
+      return 'No successful paid entries were recorded, so there is no prize payout to queue.';
+    case 'NOT_READY':
+    default:
+      return 'Settlement stays manual. Once every match in this pool window is final, the creator can settle it from here.';
+  }
+}
+
+function getScoringCopy(mode: OfficePoolMode) {
+  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+    return 'Scoring: every correct match pick is 1 point. Each correct Champion Pick for 1st and 2nd in a group is 2 points.';
+  }
+
+  return 'Scoring: Round of 32 wins are 2 points, Round of 16 wins are 2 points, Quarter-finals are 3 points, Semi-finals are 5 points, the Final is 10 points, the third-place match is 5 points, and Champion Picks are worth 15 / 10 / 5 for 1st / 2nd / 3rd.';
 }
 
 export default function OfficePoolPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const [screen, setScreen] = useState<Screen>('home');
-  const [authReady, setAuthReady] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const {
+    screen,
+    setScreen,
+    isLoading,
+    isSaving,
+    error,
+    notice,
+    allPools,
+    myPools,
+    activePoolId,
+    activePool,
+    members,
+    predictions,
+    leaderboard,
+    picks,
+    setPicks,
+    sidePicks,
+    joinInviteCode,
+    setJoinInviteCode,
+    joinSidePickMap,
+    setJoinSidePickMap,
+    activeQualifierGroupIndex,
+    setActiveQualifierGroupIndex,
+    activePodiumKey,
+    setActivePodiumKey,
+    createName,
+    setCreateName,
+    createMode,
+    setCreateMode,
+    createEntryFee,
+    setCreateEntryFee,
+    createSubmitAttempted,
+    createNameTouched,
+    setCreateNameTouched,
+    createEntryFeeTouched,
+    setCreateEntryFeeTouched,
+    currentUserId,
+    discoverPools,
+    scopeExternalId,
+    isScopedLaunch,
+    isJoinTemporarilyLocked,
+    openPool,
+    handleInviteLookup,
+    handleCreatePool,
+    handleJoinPool: submitJoinPool,
+    handleSavePicks,
+    handleSettlePool,
+  } = useOfficePoolPageData(WORLD_CUP_MODE_CONFIG_MAP);
 
-  const [allPools, setAllPools] = useState<OfficePoolSummary[]>([]);
-  const [myPools, setMyPools] = useState<OfficePoolSummary[]>([]);
-  const [activePoolId, setActivePoolId] = useState('');
-  const [activePool, setActivePool] = useState<OfficePoolSummary | null>(null);
-  const [poolReloadToken, setPoolReloadToken] = useState(0);
-  const [members, setMembers] = useState<OfficePoolMemberSummary[]>([]);
-  const [predictions, setPredictions] = useState<OfficePoolPredictionSummary[]>([]);
-  const [leaderboard, setLeaderboard] = useState<OfficePoolLeaderboardResponse | null>(null);
-  const [picks, setPicks] = useState<Record<string, OfficePoolPickOption>>({});
-  const [sidePicks, setSidePicks] = useState<OfficePoolSidePickSummary[]>([]);
-  const [joinInviteCode, setJoinInviteCode] = useState('');
-  const [selectedChampionPick, setSelectedChampionPick] = useState('');
-  const [confirmedChampionPickId, setConfirmedChampionPickId] = useState<string | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(tokenUtils.getToken());
-
-  const [createName, setCreateName] = useState('');
-  const [createMode, setCreateMode] = useState<OfficePoolMode>('WORLD_CUP_GROUP_STAGE');
-  const [createEntryFee, setCreateEntryFee] = useState('10');
-  const [createSubmitAttempted, setCreateSubmitAttempted] = useState(false);
-  const [createNameTouched, setCreateNameTouched] = useState(false);
-  const [createEntryFeeTouched, setCreateEntryFeeTouched] = useState(false);
-
-  const authToken = searchParams.get('auth_token');
-  const telegramAuthQueryData = useMemo(() => getTelegramAuthQueryData(searchParams), [searchParams]);
-  const telegramWebAppState = useMemo(() => getTelegramWebAppState(searchParams), [searchParams]);
-  const startParamScope = useMemo(
-    () => parseOfficePoolScopeFromStartParam(telegramWebAppState.startParam),
-    [telegramWebAppState.startParam],
+  const availableTeams = useMemo(() => buildTeamOptions(predictions), [predictions]);
+  const groupQualifierCards = useMemo(
+    () => (activePool?.mode === 'WORLD_CUP_GROUP_STAGE' ? buildGroupQualifierCards(predictions) : []),
+    [activePool?.mode, predictions],
   );
-  const scopeProvider = searchParams.get('scope_provider') ?? startParamScope.scopeProvider;
-  const scopeExternalId = searchParams.get('scope_external_id') ?? startParamScope.scopeExternalId;
-  const isScopedLaunch = !!scopeProvider && !!scopeExternalId;
-
-  const currentUserId = useMemo(() => {
-    const token = sessionToken ?? tokenUtils.getToken();
-    if (!token) return undefined;
-    try {
-      return jwtDecode<DecodedToken>(token).sub;
-    } catch {
-      return undefined;
-    }
-  }, [sessionToken]);
-
-  const discoverPools = useMemo(
-    () => allPools.filter((pool) => !myPools.some((mine) => mine.id === pool.id)),
-    [allPools, myPools],
+  const activeGroupCard = groupQualifierCards[activeQualifierGroupIndex] ?? null;
+  const joinSidePickCount = useMemo(
+    () => (activePool ? getJoinSidePickCount(activePool.mode, groupQualifierCards, joinSidePickMap) : 0),
+    [activePool, groupQualifierCards, joinSidePickMap],
   );
-  const championTeams = useMemo(() => buildChampionTeams(predictions), [predictions]);
-  const myMember = useMemo(
-    () => members.find((member) => member.userId === currentUserId) ?? null,
-    [members, currentUserId],
+  const requiredJoinSidePickCount = useMemo(
+    () => (activePool ? getRequiredJoinSidePickCount(activePool.mode, groupQualifierCards) : 0),
+    [activePool, groupQualifierCards],
+  );
+  const isJoinReady = !!activePool && requiredJoinSidePickCount > 0 && joinSidePickCount === requiredJoinSidePickCount;
+  const lockedSidePickLines = useMemo(
+    () => (activePool ? getLockedSidePickLines(activePool.mode, sidePicks, groupQualifierCards) : []),
+    [activePool, groupQualifierCards, sidePicks],
+  );
+  const sidePickComparisonLines = useMemo(
+    () => (
+      activePool
+        ? getSidePickComparisonLines(
+            activePool.mode,
+            sidePicks,
+            leaderboard?.resolvedSidePicks ?? [],
+            groupQualifierCards,
+          )
+        : []
+    ),
+    [activePool, groupQualifierCards, leaderboard?.resolvedSidePicks, sidePicks],
   );
   const sharedRanks = useMemo(() => {
     const counts = new Map<number, number>();
@@ -308,326 +494,14 @@ export default function OfficePoolPage() {
     }
     return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   }, [createEnd, createStart]);
-  const createWindowLabel = `${formatDate(createStart)} - ${formatDate(createEnd)}`;
+  const createWindowLabel = `${formatDate(createStart)} - ${formatDate(createEnd)} UTC`;
 
   useEffect(() => {
-    const telegramWebApp = (globalThis as any).Telegram?.WebApp;
-    telegramWebApp?.ready?.();
-    telegramWebApp?.expand?.();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const resolveOfficePoolSession = async () => {
-      try {
-        setError(null);
-
-        let nextToken = tokenUtils.getToken();
-        const requiresScopedTelegramAuth = isScopedLaunch;
-
-        if (authToken) {
-          tokenUtils.setToken(authToken, 'TELEGRAM');
-          nextToken = authToken;
-        } else if (telegramAuthQueryData) {
-          const authResponse = await telegramAuthApi.verify(telegramAuthQueryData);
-          tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
-          nextToken = authResponse.auth_token;
-        } else if (telegramWebAppState.initData) {
-          const authResponse = await telegramAuthApi.verifyMiniApp({ initData: telegramWebAppState.initData });
-          tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
-          nextToken = authResponse.auth_token;
-        } else if (requiresScopedTelegramAuth) {
-          tokenUtils.removeToken();
-          throw new Error('Missing Telegram Mini App session. Re-open Office Pool from Telegram.');
-        } else if (!tokenUtils.isTokenValid()) {
-          throw new Error('Missing authentication token');
-        } else {
-          nextToken = tokenUtils.getToken();
-        }
-
-        if (!nextToken) {
-          throw new Error('Missing authentication token');
-        }
-
-        if (cancelled) return;
-
-        setSessionToken((current) => (current === nextToken ? current : nextToken));
-        setAuthReady(true);
-
-        if (authToken || telegramAuthQueryData || telegramWebAppState.initData) {
-          navigate(
-            {
-              pathname: '/office-pool',
-              search: buildOfficePoolSearch(scopeProvider, scopeExternalId),
-            },
-            { replace: true },
-          );
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('Failed to load office pools:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load office pools');
-        setSessionToken(null);
-        setAuthReady(true);
-        setIsLoading(false);
-      }
-    };
-
-    void resolveOfficePoolSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authToken,
-    isScopedLaunch,
-    navigate,
-    scopeExternalId,
-    scopeProvider,
-    telegramAuthQueryData,
-    telegramWebAppState.initData,
-  ]);
-
-  useEffect(() => {
-    if (!authReady || !sessionToken) {
+    if (activeQualifierGroupIndex < groupQualifierCards.length) {
       return;
     }
-
-    let cancelled = false;
-
-    const refreshOfficePoolHome = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const [mine, all] = await Promise.all([
-          officePoolApi.listMine(),
-          isScopedLaunch
-            ? officePoolApi.list({ scopeProvider, scopeExternalId })
-            : Promise.resolve([]),
-        ]);
-
-        if (cancelled) return;
-
-        setMyPools(mine);
-        setAllPools(all);
-      } catch (err) {
-        if (cancelled) return;
-        console.error('Failed to refresh office pools:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load office pools');
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void refreshOfficePoolHome();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, isScopedLaunch, scopeExternalId, scopeProvider, sessionToken]);
-
-  useEffect(() => {
-    if (!activePoolId || (screen !== 'detail' && screen !== 'picks')) return;
-
-    const loadPoolContext = async () => {
-      try {
-        setError(null);
-        const pool = await officePoolApi.getById(activePoolId);
-
-        setActivePool(pool);
-
-        if (pool.isMember) {
-          const [nextPredictions, nextMembers, nextLeaderboard, nextPicks, nextSidePicks] = await Promise.all([
-            officePoolApi.getPredictions(activePoolId),
-            officePoolApi.getMembers(activePoolId),
-            officePoolApi.getLeaderboard(activePoolId),
-            officePoolApi.getPicks(activePoolId).catch(() => ({})),
-            officePoolApi.getSidePicks(activePoolId).catch(() => []),
-          ]);
-          setPredictions(nextPredictions);
-          setMembers(nextMembers);
-          setLeaderboard(nextLeaderboard);
-          setPicks(nextPicks);
-          setSidePicks(nextSidePicks);
-        } else {
-          const nextPredictions = await officePoolApi.getPredictions(activePoolId).catch(() => []);
-          setPredictions(nextPredictions);
-          setMembers([]);
-          setLeaderboard(null);
-          setPicks({});
-          setSidePicks([]);
-        }
-      } catch (err) {
-        console.error('Failed to load office pool details:', err);
-        setError('Failed to load office pool details');
-      } finally {
-      }
-    };
-
-    void loadPoolContext();
-  }, [activePoolId, poolReloadToken, screen]);
-
-  useEffect(() => {
-    const championSidePick = getChampionSidePick(sidePicks);
-    if (championSidePick) {
-      setSelectedChampionPick(championSidePick.teamId);
-      setConfirmedChampionPickId(championSidePick.teamId);
-      return;
-    }
-
-    if (!myMember?.championPickTeamId) return;
-    setSelectedChampionPick(myMember.championPickTeamId);
-    setConfirmedChampionPickId(myMember.championPickTeamId);
-  }, [myMember?.championPickTeamId, sidePicks]);
-
-  const refreshHome = async () => {
-    const [mine, all] = await Promise.all([
-      officePoolApi.listMine(),
-      isScopedLaunch
-        ? officePoolApi.list({ scopeProvider, scopeExternalId })
-        : Promise.resolve([]),
-    ]);
-    setMyPools(mine);
-    setAllPools(all);
-  };
-
-  const refreshHomeInBackground = () => {
-    void refreshHome().catch((err) => {
-      console.error('Failed to refresh office pool home state:', err);
-    });
-  };
-
-  const openPool = (poolId: string, nextScreen: Screen = 'detail') => {
-    setActivePoolId(poolId);
-    setPoolReloadToken((current) => current + 1);
-    setSelectedChampionPick('');
-    setConfirmedChampionPickId(null);
-    setSidePicks([]);
-    setScreen(nextScreen);
-    setError(null);
-  };
-
-  const handleInviteLookup = async () => {
-    try {
-      setError(null);
-      setNotice(null);
-      const code = joinInviteCode.trim().toUpperCase();
-      if (!code) return;
-      const pool = await officePoolApi.getByInviteCode(code);
-      setJoinInviteCode(code);
-      openPool(pool.id, 'detail');
-    } catch (err: any) {
-      console.error('Failed to find office pool by invite:', err);
-      setError(err?.response?.data?.message ?? 'Invite code not found');
-    }
-  };
-
-  const handleCreatePool = async () => {
-    try {
-      setError(null);
-      setNotice(null);
-      setIsSaving(true);
-      setCreateSubmitAttempted(true);
-      const trimmedName = createName.trim();
-      const entryFee = Number(createEntryFee);
-      if (!trimmedName) {
-        throw new Error('Pool name is required');
-      }
-      if (!Number.isFinite(entryFee) || entryFee <= 0) {
-        throw new Error('Minimum entry fee must be greater than 0 PICK');
-      }
-      if (new Date(startOfDayIso(createStart)) >= new Date(endOfDayIso(createEnd))) {
-        throw new Error('End date must be after the start date');
-      }
-      const payload: CreateOfficePoolRequest = {
-        name: trimmedName,
-        mode: createMode,
-        tournament: 'WORLD_CUP',
-        seasonKey: '2026',
-        startsAt: startOfDayIso(createStart),
-        endsAt: endOfDayIso(createEnd),
-        scopeProvider,
-        scopeExternalId,
-        entryFee,
-      };
-
-      const pool = await officePoolApi.create(payload);
-      setCreateName('');
-      setCreateMode('WORLD_CUP_GROUP_STAGE');
-      setCreateEntryFee('10');
-      setCreateSubmitAttempted(false);
-      setCreateNameTouched(false);
-      setCreateEntryFeeTouched(false);
-      openPool(pool.id, 'detail');
-      setNotice(`Created ${pool.name}. Set your champion pick next.`);
-      refreshHomeInBackground();
-    } catch (err: any) {
-      console.error('Failed to create office pool:', err);
-      setError(err?.response?.data?.message ?? 'Failed to create office pool');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleJoinPool = async () => {
-    if (!activePool || !selectedChampionPick) return;
-    try {
-      setIsSaving(true);
-      setError(null);
-      setNotice(null);
-      const response = await officePoolApi.join(activePool.id, {
-        inviteCode: joinInviteCode.trim().toUpperCase() || activePool.inviteCode,
-        championPickTeamId: selectedChampionPick,
-      });
-      openPool(response.pool.id, 'detail');
-      setNotice(`Joined ${response.pool.name}`);
-      refreshHomeInBackground();
-    } catch (err: any) {
-      console.error('Failed to join office pool:', err);
-      setError(err?.response?.data?.message ?? 'Failed to join office pool');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSetChampionPick = async () => {
-    if (!activePool || !selectedChampionPick) return;
-    try {
-      setIsSaving(true);
-      setError(null);
-      setNotice(null);
-      const savedSidePicks = await officePoolApi.saveSidePicks(activePool.id, [
-        {
-          type: 'CHAMPION',
-          key: CHAMPION_SIDE_PICK_KEY,
-          teamId: selectedChampionPick,
-        },
-      ]);
-      const championSidePick = getChampionSidePick(savedSidePicks);
-      const savedPickId = championSidePick?.teamId ?? selectedChampionPick;
-      setSidePicks(savedSidePicks);
-      setConfirmedChampionPickId(savedPickId);
-      setSelectedChampionPick(savedPickId);
-      const [nextMembers, nextLeaderboard] = await Promise.all([
-        officePoolApi.getMembers(activePool.id).catch(() => null),
-        officePoolApi.getLeaderboard(activePool.id),
-      ]);
-      if (nextMembers) {
-        setMembers(nextMembers);
-      }
-      setLeaderboard(nextLeaderboard);
-      setNotice('Champion pick saved');
-    } catch (err: any) {
-      console.error('Failed to save champion pick:', err);
-      setError(err?.response?.data?.message ?? 'Failed to save champion pick');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    setActiveQualifierGroupIndex(0);
+  }, [activeQualifierGroupIndex, groupQualifierCards.length]);
 
   const handlePickChange = (predictionId: string, option: OfficePoolPickOption) => {
     setPicks((prev) => ({
@@ -636,22 +510,42 @@ export default function OfficePoolPage() {
     }));
   };
 
-  const handleSavePicks = async () => {
-    if (!activePool) return;
-    try {
-      setIsSaving(true);
-      setError(null);
-      setNotice(null);
-      await officePoolApi.savePicks(activePool.id, picks);
-      const nextLeaderboard = await officePoolApi.getLeaderboard(activePool.id);
-      setLeaderboard(nextLeaderboard);
-      setNotice('Picks saved');
-    } catch (err: any) {
-      console.error('Failed to save office pool picks:', err);
-      setError(err?.response?.data?.message ?? 'Failed to save office pool picks');
-    } finally {
-      setIsSaving(false);
-    }
+  const handleGroupQualifierPick = (groupKey: string, slot: 'FIRST' | 'SECOND', teamId: string) => {
+    const firstKey = `${groupKey}_FIRST`;
+    const secondKey = `${groupKey}_SECOND`;
+
+    setJoinSidePickMap((prev) => {
+      const next = { ...prev };
+      const currentKey = slot === 'FIRST' ? firstKey : secondKey;
+      const otherKey = slot === 'FIRST' ? secondKey : firstKey;
+
+      next[currentKey] = teamId;
+      if (next[otherKey] === teamId) {
+        next[otherKey] = '';
+      }
+      return next;
+    });
+  };
+
+  const handlePodiumPick = (slot: PodiumKey, teamId: string) => {
+    setJoinSidePickMap((prev) => {
+      const next = { ...prev };
+      PODIUM_KEYS.forEach((currentKey) => {
+        if (currentKey !== slot && next[currentKey] === teamId) {
+          next[currentKey] = '';
+        }
+      });
+      next[slot] = teamId;
+      return next;
+    });
+  };
+
+  const handleJoinPool = async () => {
+    if (!activePool || !isJoinReady) return;
+
+    await submitJoinPool(
+      buildJoinSidePickPayload(activePool.mode, groupQualifierCards, joinSidePickMap),
+    );
   };
 
   if (isLoading) {
@@ -686,7 +580,7 @@ export default function OfficePoolPage() {
             <div>
               <div className="office-pool-eyebrow">DePick - Office Pools</div>
               <h2>{isScopedLaunch ? 'Play your pool with your friends' : 'Your joined office pools'}</h2>
-              <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with a champion pick.' : 'Open a pool you already joined from Telegram group chat.'}</p>
+              <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with locked Champion Picks.' : 'Open a pool you already joined from Telegram group chat.'}</p>
             </div>
             {isScopedLaunch ? (
               <button className="predict-button office-pool-cta" onClick={() => setScreen('create')}>
@@ -755,8 +649,12 @@ export default function OfficePoolPage() {
                   <button
                     key={mode.mode}
                     type="button"
-                    className={`office-pool-mode-card ${createMode === mode.mode ? 'office-pool-mode-card-active' : ''}`}
-                    onClick={() => setCreateMode(mode.mode)}
+                    className={`office-pool-mode-card ${createMode === mode.mode ? 'office-pool-mode-card-active' : ''} ${mode.isLocked ? 'office-pool-mode-card-locked' : ''}`}
+                    onClick={() => {
+                      if (mode.isLocked) return;
+                      setCreateMode(mode.mode);
+                    }}
+                    disabled={mode.isLocked}
                   >
                     <div className="office-pool-mode-head">
                       <strong>{mode.title}</strong>
@@ -765,6 +663,7 @@ export default function OfficePoolPage() {
                     <p>{mode.description}</p>
                     <div className="office-pool-mode-meta">
                       <span>{formatDate(mode.startsAt)} - {formatDate(mode.endsAt)}</span>
+                      {mode.lockedMessage ? <span>{mode.lockedMessage}</span> : null}
                     </div>
                   </button>
                 ))}
@@ -791,15 +690,15 @@ export default function OfficePoolPage() {
                   {' · '}
                   {createWindowLabel}
                 </p>
-                <p className="office-pool-copy">{createModeConfig.championLabel}</p>
+                <p className="office-pool-copy">{createModeConfig.championPickLabel}</p>
                 <p className="office-pool-copy">Every player pays at least this many PICK to enter, so the prize pool grows as more friends join.</p>
                 <p className="office-pool-copy">
                   Creating the pool is free for the group creator. You only pay when you join as a player.
                   {createWindowDays ? ` Pool window: ${createWindowDays} day${createWindowDays > 1 ? 's' : ''}.` : ''}
                 </p>
               </div>
-              <button className="predict-button" onClick={handleCreatePool} disabled={isSaving}>
-                {isSaving ? 'Creating...' : 'Create Pool'}
+              <button className="predict-button" onClick={handleCreatePool} disabled={isSaving || !!createModeConfig.isLocked}>
+                {isSaving ? 'Creating...' : createModeConfig.isLocked ? (createModeConfig.lockedMessage ?? 'Locked') : 'Create Pool'}
               </button>
             </div>
           </section>
@@ -839,72 +738,124 @@ export default function OfficePoolPage() {
                       <div><span>Invite</span><strong>{activePool.inviteCode}</strong></div>
                       <div><span>Joined</span><strong>{activePool.participants} players</strong></div>
                       <div><span>Minimum entry</span><strong>{activePool.entryFee} PICK</strong></div>
-                      <div><span>Window</span><strong>{formatDateTime(activePool.startsAt)} - {formatDateTime(activePool.endsAt)}</strong></div>
+                      <div><span>Window (UTC)</span><strong>{formatDateTime(activePool.startsAt)} - {formatDateTime(activePool.endsAt)}</strong></div>
                       <div><span>Format</span><strong>{getModeLabel(activePool.mode)}</strong></div>
-                      <div><span>Scope</span><strong>{activePool.scopeExternalId ?? 'General'}</strong></div>
                     </div>
                   </section>
 
                   {!activePool.isMember ? (
-                    <section className="office-pool-panel">
-                      <h2>Join Pool</h2>
-                      <p className="office-pool-copy">Set your champion pick before you enter the pool. We will keep calling it champion pick in the join flow, even while World Cup side-picks expand later.</p>
-                      <ChampionPicker
-                        teams={championTeams}
-                        selectedTeamId={selectedChampionPick}
-                        onSelect={setSelectedChampionPick}
-                      />
-                      <button className="predict-button" onClick={handleJoinPool} disabled={!selectedChampionPick || isSaving}>
-                        {isSaving ? 'Joining...' : 'Join Pool'}
-                      </button>
-                      <p className="office-pool-copy">
-                        Correct champion pick earns +{leaderboard?.championBonusPoints ?? 5} points after the pool fully settles.
-                      </p>
-                    </section>
+                    <>
+                      <section className="office-pool-panel">
+                        <h2>Join Pool</h2>
+                        <p className="office-pool-copy">
+                          {activePool.mode === 'WORLD_CUP_GROUP_STAGE'
+                            ? 'Choose your Champion Picks for 1st and 2nd place in every group before you join. These Champion Picks lock immediately after join.'
+                            : 'Choose your Champion Picks for final 1st, 2nd, and 3rd place before you join. These Champion Picks lock immediately after join.'}
+                        </p>
+                        {isJoinTemporarilyLocked ? (
+                          <p className="office-pool-copy">
+                            World Cup Knockout Stage is locked for now. It will start on Jun 29 UTC.
+                          </p>
+                        ) : null}
+                        {activePool.mode === 'WORLD_CUP_GROUP_STAGE' ? (
+                          <GroupQualifierPicker
+                            activeGroupCard={activeGroupCard}
+                            activeIndex={activeQualifierGroupIndex}
+                            totalGroups={groupQualifierCards.length}
+                            joinSidePickMap={joinSidePickMap}
+                            onBack={() => setActiveQualifierGroupIndex((current) => Math.max(0, current - 1))}
+                            onNext={() => setActiveQualifierGroupIndex((current) => Math.min(groupQualifierCards.length - 1, current + 1))}
+                            onPick={handleGroupQualifierPick}
+                          />
+                        ) : (
+                          <PodiumPicker
+                            teams={availableTeams}
+                            activeSlot={activePodiumKey}
+                            joinSidePickMap={joinSidePickMap}
+                            onSlotChange={setActivePodiumKey}
+                            onPick={handlePodiumPick}
+                          />
+                        )}
+                        <button className="predict-button" onClick={handleJoinPool} disabled={!isJoinReady || isSaving || isJoinTemporarilyLocked}>
+                          {isSaving ? 'Joining...' : 'Join Pool'}
+                        </button>
+                        <p className="office-pool-copy">
+                          Champion Picks selected: {joinSidePickCount}/{requiredJoinSidePickCount}
+                        </p>
+                      </section>
+
+                      {activePool.isCreator && leaderboard ? (
+                        <section className="office-pool-panel">
+                          <div className="office-pool-panel-head">
+                            <h2>Creator Settlement</h2>
+                            {leaderboard.settlementStatus === 'READY' ? (
+                              <button className="predict-button office-pool-inline-btn" onClick={handleSettlePool} disabled={isSaving}>
+                                {isSaving ? 'Settling...' : 'Settle Pool'}
+                              </button>
+                            ) : null}
+                          </div>
+                          <p className="office-pool-copy">
+                            Prize pool: {leaderboard.totalPrizePool} PICK
+                          </p>
+                          <p className="office-pool-copy">
+                            {getSettlementCopy(leaderboard.settlementStatus, leaderboard.totalPrizePool)}
+                          </p>
+                        </section>
+                      ) : null}
+                    </>
                   ) : (
                     <>
                       <section className="office-pool-panel">
                         <h2>Your Entry</h2>
                         <div className="office-pool-entry-card">
                           <div>
-                            <span className="office-pool-copy-label">Champion Pick</span>
-                            <strong>
-                              {myMember?.championPickTeamName
-                                ?? (confirmedChampionPickId
-                                  ? (championTeams.find((t) => t.id === confirmedChampionPickId)?.name ?? 'Saved')
-                                  : 'Not chosen yet')}
-                            </strong>
+                            <span className="office-pool-copy-label">{getLockedSidePickTitle()}</span>
+                            <strong>{lockedSidePickLines.length > 0 ? `${lockedSidePickLines.length} saved` : 'Saved on join'}</strong>
                           </div>
                           <div>
                             <span className="office-pool-copy-label">Invite</span>
                             <strong>{activePool.inviteCode}</strong>
                           </div>
                         </div>
-                        {(confirmedChampionPickId || myMember?.championPickTeamId) ? (
-                          <p className="office-pool-copy">
-                            Your champion pick is locked in for this pool. Correct pick earns +{leaderboard?.championBonusPoints ?? 5} points when the winner is known.
-                          </p>
-                        ) : (
+                        {lockedSidePickLines.length > 0 ? (
+                          <div className="office-pool-member-list">
+                            {lockedSidePickLines.map((line) => (
+                              <div key={line} className="office-pool-member-row">
+                                <span>{line}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <p className="office-pool-copy">
+                          These Champion Picks are locked after you join the pool. Normal match picks stay editable until each match locks.
+                        </p>
+                        {sidePickComparisonLines.length > 0 ? (
                           <>
-                            <ChampionPicker
-                              teams={championTeams}
-                              selectedTeamId={selectedChampionPick}
-                              onSelect={setSelectedChampionPick}
-                            />
-                            <button className="predict-button" onClick={handleSetChampionPick} disabled={!selectedChampionPick || isSaving}>
-                              {isSaving ? 'Saving...' : 'Set Champion Pick'}
-                            </button>
                             <p className="office-pool-copy">
-                              Champion pick is stored with your pool entry. Correct pick earns +{leaderboard?.championBonusPoints ?? 5} points when the winner is known.
+                              Official settled Champion Picks:
                             </p>
+                            <div className="office-pool-member-list">
+                              {sidePickComparisonLines.map((line) => (
+                                <div key={line} className="office-pool-member-row">
+                                  <span>{line}</span>
+                                </div>
+                              ))}
+                            </div>
                           </>
-                        )}
+                        ) : null}
                       </section>
 
                       <section className="office-pool-panel">
                         <div className="office-pool-panel-head">
                           <h2>Prize Pool</h2>
-                          <span className="office-pool-progress">{leaderboard?.totalPrizePool ?? 0} PICK</span>
+                          <div className="office-pool-panel-actions">
+                            <span className="office-pool-progress">{leaderboard?.totalPrizePool ?? 0} PICK</span>
+                            {activePool.isCreator && leaderboard?.settlementStatus === 'READY' ? (
+                              <button className="predict-button office-pool-inline-btn" onClick={handleSettlePool} disabled={isSaving}>
+                                {isSaving ? 'Settling...' : 'Settle Pool'}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="office-pool-entry-card">
                           <div>
@@ -919,15 +870,12 @@ export default function OfficePoolPage() {
                         <p className="office-pool-copy">
                           Winner takes the pot. If first place is tied, the {leaderboard?.totalPrizePool ?? 0} PICK reward is shared evenly across tied winners.
                         </p>
-                        {leaderboard?.championWinnerTeamName ? (
-                          <p className="office-pool-copy">
-                            Champion winner: {leaderboard.championWinnerTeamName} · +{leaderboard.championBonusPoints} bonus points applied.
-                          </p>
-                        ) : (
-                          <p className="office-pool-copy">
-                            Champion bonus is applied after the full pool window settles and a final winner can be inferred.
-                          </p>
-                        )}
+                        <p className="office-pool-copy">
+                          {getSettlementCopy(leaderboard?.settlementStatus ?? 'NOT_READY', leaderboard?.totalPrizePool ?? 0)}
+                        </p>
+                        <p className="office-pool-copy">
+                          {getScoringCopy(activePool.mode)}
+                        </p>
                       </section>
 
                       <section className="office-pool-panel">
@@ -948,8 +896,7 @@ export default function OfficePoolPage() {
                                   <div>
                                     <strong>{entry.displayNameSnapshot}</strong>
                                     <div className="office-pool-copy-line">
-                                      {entry.championPickTeamName ?? 'No champion pick'}
-                                      {entry.championPickCorrect ? ` · +${entry.championBonusPoints} champion bonus` : ''}
+                                      {entry.matchPoints} match pts · {entry.sidePickPoints} Champion Pick pts
                                       {isSharedRank ? ' · Shared place' : ''}
                                     </div>
                                   </div>
@@ -973,7 +920,7 @@ export default function OfficePoolPage() {
                           {members.map((member) => (
                             <div key={member.userId} className="office-pool-member-row">
                               <strong>{member.displayNameSnapshot}</strong>
-                              <span>{member.championPickTeamName ?? 'Champion not set'}</span>
+                              <span>{activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? (member.championPickTeamName ?? 'Champion Picks saved') : 'Champion Picks locked'}</span>
                             </div>
                           ))}
                         </div>
@@ -1106,6 +1053,131 @@ function PoolListSection({
   );
 }
 
+function GroupQualifierPicker({
+  activeGroupCard,
+  activeIndex,
+  totalGroups,
+  joinSidePickMap,
+  onBack,
+  onNext,
+  onPick,
+}: {
+  activeGroupCard: GroupQualifierCard | null;
+  activeIndex: number;
+  totalGroups: number;
+  joinSidePickMap: Record<string, string>;
+  onBack: () => void;
+  onNext: () => void;
+  onPick: (groupKey: string, slot: 'FIRST' | 'SECOND', teamId: string) => void;
+}) {
+  if (!activeGroupCard) {
+    return <div className="empty"><p>No eligible teams found for this pool yet.</p></div>;
+  }
+
+  const firstKey = `${activeGroupCard.groupKey}_FIRST`;
+  const secondKey = `${activeGroupCard.groupKey}_SECOND`;
+
+  return (
+    <>
+      <div className="office-pool-panel-head">
+        <div>
+          <h2>Group Qualifiers</h2>
+          <p className="office-pool-copy">{activeGroupCard.label} · {activeIndex + 1}/{totalGroups}</p>
+        </div>
+      </div>
+      <div className="office-pool-inline-row office-pool-inline-row-equal">
+        <button className="predict-button office-pool-inline-btn" onClick={onBack} disabled={activeIndex === 0}>Previous</button>
+        <button className="predict-button office-pool-inline-btn" onClick={onNext} disabled={activeIndex >= totalGroups - 1}>Next</button>
+      </div>
+      <div className="office-pool-champion-grid">
+        {activeGroupCard.teams.map((team) => (
+          <div key={team.id} className="office-pool-champion-card">
+            <img src={team.logo} alt={team.name} />
+            <strong>{team.name}</strong>
+            <div className="office-pool-pick-row office-pool-sidepick-row">
+              <button
+                className={`office-pool-pick-btn ${joinSidePickMap[firstKey] === team.id ? 'office-pool-pick-selected' : ''}`}
+                onClick={() => onPick(activeGroupCard.groupKey, 'FIRST', team.id)}
+                type="button"
+              >
+                1st
+              </button>
+              <button
+                className={`office-pool-pick-btn ${joinSidePickMap[secondKey] === team.id ? 'office-pool-pick-selected' : ''}`}
+                onClick={() => onPick(activeGroupCard.groupKey, 'SECOND', team.id)}
+                type="button"
+              >
+                2nd
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PodiumPicker({
+  teams,
+  activeSlot,
+  joinSidePickMap,
+  onSlotChange,
+  onPick,
+}: {
+  teams: TeamOption[];
+  activeSlot: PodiumKey;
+  joinSidePickMap: Record<string, string>;
+  onSlotChange: (slot: PodiumKey) => void;
+  onPick: (slot: PodiumKey, teamId: string) => void;
+}) {
+  if (teams.length === 0) {
+    return <div className="empty"><p>No eligible teams found for this pool yet.</p></div>;
+  }
+
+  return (
+    <>
+      <div className="office-pool-panel-head">
+        <div>
+          <h2>Final Podium</h2>
+          <p className="office-pool-copy">Choose a slot, then tap a team.</p>
+        </div>
+      </div>
+      <div className="office-pool-pick-row">
+        {PODIUM_KEYS.map((slot) => (
+          <button
+            key={slot}
+            className={`office-pool-pick-btn ${activeSlot === slot ? 'office-pool-pick-selected' : ''}`}
+            onClick={() => onSlotChange(slot)}
+            type="button"
+          >
+            {slot === 'FIRST' ? '1st' : slot === 'SECOND' ? '2nd' : '3rd'}
+          </button>
+        ))}
+      </div>
+      <div className="office-pool-champion-grid">
+        {teams.map((team) => {
+          const teamTakenByOtherSlot = PODIUM_KEYS.some((slot) => slot !== activeSlot && joinSidePickMap[slot] === team.id);
+          return (
+            <button
+              key={team.id}
+              className={`office-pool-champion-card ${joinSidePickMap[activeSlot] === team.id ? 'office-pool-champion-card-active' : ''}`}
+              onClick={() => onPick(activeSlot, team.id)}
+              disabled={teamTakenByOtherSlot}
+              type="button"
+            >
+              <img src={team.logo} alt={team.name} />
+              <strong>{team.name}</strong>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/*
+Legacy single-team champion picker kept commented out while stage-aware
+side-pick join flows replace it for World Cup office pools.
 function ChampionPicker({
   teams,
   selectedTeamId,
@@ -1134,3 +1206,4 @@ function ChampionPicker({
     </div>
   );
 }
+*/

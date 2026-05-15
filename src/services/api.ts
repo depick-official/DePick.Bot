@@ -188,6 +188,11 @@ export const officePoolApi = {
     const response = await api.get<OfficePoolLeaderboardResponse>(`/office-pools/${id}/leaderboard`);
     return response.data;
   },
+
+  settle: async (id: string): Promise<OfficePoolLeaderboardResponse> => {
+    const response = await api.post<OfficePoolLeaderboardResponse>(`/office-pools/${id}/settle`);
+    return response.data;
+  },
 };
 
 export const telegramAuthApi = {

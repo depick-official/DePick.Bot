@@ -18,15 +18,39 @@ export interface Prediction {
     datetime: string;
     homeTeam: Team;
     awayTeam: Team;
+    // ── Legacy pool fields (M4.4 compat-bridge from BE; retire at M4.5) ──
     totalPoolAmountToken: number;
     totalPoolAmountCredit: number;
     homeTeamPoolCredit: number;
     awayTeamPoolCredit: number;
     homeTeamPoolToken: number;
     awayTeamPoolToken: number;
+    // ── M4.1 chain-native fields ──
+    homeOdds: number;                 // [0,1], sum-to-1 with awayOdds
+    awayOdds: number;
+    marketId: number | null;          // null for NAIVE
+    marketContractAddress: string;
+    marketCollateralToken: number;    // PICK; replaces totalPoolAmountToken at M4.5
+    marketVolumeToken: { home: number; away: number; total: number };
     tournament?: string;
     status: PredictionGameStatus | string;
     result?: PredictionGameResult | string;
     create_time: string;
     update_time: string;
+}
+
+// ── M4.2 quote endpoint ─────────────────────────────────────────────────────
+
+export interface QuoteRequest {
+    selectedTeam: 'HOME' | 'AWAY';
+    amount: number; // PICK, > 0
+}
+
+export interface QuoteResponse {
+    fee: number;               // deposit fee (LMSR-only today; 0 for NAIVE)
+    netStake: number;          // amount − fee
+    sharesOut: number;         // chain-true post-slippage shares
+    avgEntryPrice: number;     // [0,1]
+    potentialPayout: number;   // GROSS of claim-time withdraw fee — render as "To Win"
+    mmType: 'LMSR' | 'NAIVE';
 } 

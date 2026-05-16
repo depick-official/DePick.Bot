@@ -1,16 +1,19 @@
 import axios, { AxiosInstance } from 'axios';
 import { tokenUtils } from '../utils/token';
-import { Prediction } from '../types/Prediction';
+import { Prediction, QuoteRequest, QuoteResponse } from '../types/Prediction';
 import { PredictionRecord, CreatePredictionRecordRequest } from '../types/PredictionRecord';
 import { User } from '../types/User';
 
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
+// `ngrok-skip-browser-warning` short-circuits the ngrok-free interstitial that
+// would otherwise return 200 with no CORS headers and break dev-env requests.
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
   },
 });
 
@@ -51,6 +54,14 @@ export const predictionApi = {
   getUpcoming: async (): Promise<Prediction[]> => {
     const response = await api.get<Prediction[]>('/predictions');
     return response.data.filter(p => p.status === 'UPCOMING');
+  },
+
+  // M4.2 — chain-true post-slippage quote. LMSR routes through hub.previewPredict;
+  // NAIVE is BE-synthesized using the same post-bet pool-ratio formula the FE
+  // used to compute locally. Replaces `calculateWin` in PredictionModal.
+  getQuote: async (predictionId: string, body: QuoteRequest): Promise<QuoteResponse> => {
+    const response = await api.post<QuoteResponse>(`/predictions/${predictionId}/quote`, body);
+    return response.data;
   },
 };
 

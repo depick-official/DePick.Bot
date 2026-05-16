@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Prediction } from '../types/Prediction';
 import { SelectedTeam, CurrencyType, CreatePredictionRecordRequest } from '../types/PredictionRecord';
-import { calculateWin, formatNumber, formatToTwoDecimals, calculatePredictRatio } from '../utils/math';
-import { predictionRecordApi, userApi } from '../services/api';
+import { formatNumber, formatToTwoDecimals } from '../utils/math';
+import { predictionRecordApi, predictionApi, userApi } from '../services/api';
 import '../styles/modal.scss';
 
 interface PredictionModalProps {
@@ -42,24 +42,34 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
     }
   }, []);
 
-  // Calculate win amount whenever amount or team changes
+  // M4.3 — chain-true post-slippage quote from BE. Debounced so dragging the
+  // slider doesn't fire one RPC per pixel. Cleanup cancels the in-flight timer
+  // AND ignores stale responses if the user moved on before the call returned.
   useEffect(() => {
-    if (selectedTeam && amount > 0) {
-      const [win, r] = calculateWin(
-        amount,
-        0,
-        CurrencyType.TOKEN,
-        selectedTeam,
-        match.homeTeamPoolToken,
-        match.awayTeamPoolToken
-      );
-      setPotentialWin(win);
-      setRatio(r);
-    } else {
+    if (!selectedTeam || amount <= 0) {
       setPotentialWin('0');
       setRatio('0');
+      return;
     }
-  }, [amount, selectedTeam, match]);
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const quote = await predictionApi.getQuote(match.id, { selectedTeam, amount });
+        if (cancelled) return;
+        setPotentialWin(quote.potentialPayout.toString());
+        setRatio(quote.avgEntryPrice.toString());
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to fetch quote:', err);
+        setPotentialWin('0');
+        setRatio('0');
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [amount, selectedTeam, match.id]);
 
   const handleTeamSelect = (team: SelectedTeam) => {
     setSelectedTeam(team);
@@ -121,9 +131,7 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
     onClose();
   };
 
-  // Calculate current odds for team selection
-  const homeRatio = calculatePredictRatio(match.totalPoolAmountToken, match.homeTeamPoolToken);
-  const awayRatio = calculatePredictRatio(match.totalPoolAmountToken, match.awayTeamPoolToken);
+  // Odds direct from chain-supplied fields (M4.1). Fractions in [0,1].
 
   // Success modal
   if (showSuccess) {
@@ -170,7 +178,7 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
                 <img src={match.homeTeam.logo} alt={match.homeTeam.name} />
                 <span>{match.homeTeam.name}</span>
               </div>
-              <span className="odds">{formatNumber(homeRatio * 100)}%</span>
+              <span className="odds">{formatNumber(match.homeOdds * 100)}%</span>
             </button>
 
             <button
@@ -181,7 +189,7 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
                 <img src={match.awayTeam.logo} alt={match.awayTeam.name} />
                 <span>{match.awayTeam.name}</span>
               </div>
-              <span className="odds">{formatNumber(awayRatio * 100)}%</span>
+              <span className="odds">{formatNumber(match.awayOdds * 100)}%</span>
             </button>
 
             <button onClick={onClose} className="cancel-button">
@@ -213,7 +221,7 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
             </div>
             <div className="prize-pool">
               <p>Prize Pool</p>
-              <span>{formatNumber(match.totalPoolAmountToken)} PICK</span>
+              <span>{formatNumber(match.marketCollateralToken)} PICK</span>
             </div>
           </div>
 

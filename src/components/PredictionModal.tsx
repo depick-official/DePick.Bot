@@ -109,8 +109,8 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
         currencyType: CurrencyType.TOKEN,
         selectedTeam,
         predictionAmount: amount,
-        homeTeamPool: match.homeTeamPoolToken,
-        awayTeamPool: match.awayTeamPoolToken
+        homeTeamPool: match.marketVolumeToken.home,
+        awayTeamPool: match.marketVolumeToken.away
       };
 
       await predictionRecordApi.createPredictionRecord(formData);

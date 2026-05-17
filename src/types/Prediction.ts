@@ -18,13 +18,10 @@ export interface Prediction {
     datetime: string;
     homeTeam: Team;
     awayTeam: Team;
-    // ── Legacy pool fields (M4.4 compat-bridge from BE; retire at M4.5) ──
-    totalPoolAmountToken: number;
+    // ── CREDIT-side legacy fields (DB-only ledger; retire at M9 with NAIVE) ──
     totalPoolAmountCredit: number;
     homeTeamPoolCredit: number;
     awayTeamPoolCredit: number;
-    homeTeamPoolToken: number;
-    awayTeamPoolToken: number;
     // ── M4.1 chain-native fields ──
     homeOdds: number;                 // [0,1], sum-to-1 with awayOdds
     awayOdds: number;

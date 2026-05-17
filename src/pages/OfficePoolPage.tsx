@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   OfficePoolMode,
   OfficePoolPickOption,
@@ -20,6 +20,13 @@ interface GroupQualifierCard {
   groupKey: string;
   label: string;
   teams: TeamOption[];
+}
+
+interface MatchPickWindow {
+  id: string;
+  label: string;
+  matchCount: number;
+  matches: OfficePoolPredictionSummary[];
 }
 
 interface WorldCupModeConfig {
@@ -92,6 +99,10 @@ function formatDateTime(value: string) {
 
 function formatDate(value: string) {
   return utcDateFormatter.format(new Date(startOfDayIso(value)));
+}
+
+function formatDateWindowLabel(value: string) {
+  return utcDateFormatter.format(new Date(`${value}T00:00:00.000Z`));
 }
 
 function getModeLabel(mode: OfficePoolMode) {
@@ -224,6 +235,101 @@ function buildGroupQualifierCards(predictions: OfficePoolPredictionSummary[]): G
 
 function getSidePickTeamName(sidePicks: OfficePoolSidePickSummary[], type: string, key: string) {
   return sidePicks.find((sidePick) => sidePick.type === type && sidePick.key === key)?.teamName ?? null;
+}
+
+function buildMatchPickWindows(predictions: OfficePoolPredictionSummary[]): MatchPickWindow[] {
+  const matchesByDate = new Map<string, OfficePoolPredictionSummary[]>();
+
+  predictions.forEach((match) => {
+    const dateKey = match.datetime.slice(0, 10);
+    const currentMatches = matchesByDate.get(dateKey) ?? [];
+    currentMatches.push(match);
+    matchesByDate.set(dateKey, currentMatches);
+  });
+
+  return Array.from(matchesByDate.entries())
+    .sort(([leftDate], [rightDate]) => leftDate.localeCompare(rightDate))
+    .map(([dateKey, matches]) => ({
+      id: dateKey,
+      label: formatDateWindowLabel(dateKey),
+      matchCount: matches.length,
+      matches: matches.sort(
+        (left, right) =>
+          new Date(left.datetime).getTime() - new Date(right.datetime).getTime(),
+      ),
+    }));
+}
+
+function buildGroupMatchWindows(
+  predictions: OfficePoolPredictionSummary[],
+  groupCards: GroupQualifierCard[],
+): MatchPickWindow[] {
+  return groupCards.map((groupCard) => {
+    const teamIds = new Set(groupCard.teams.map((team) => team.id));
+    const matches = predictions
+      .filter(
+        (match) =>
+          teamIds.has(match.homeTeamId) && teamIds.has(match.awayTeamId),
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.datetime).getTime() - new Date(right.datetime).getTime(),
+      );
+
+    return {
+      id: groupCard.groupKey,
+      label: groupCard.label,
+      matchCount: matches.length,
+      matches,
+    };
+  });
+}
+
+function getKnockoutRoundOrder(roundLabel?: string | null) {
+  const normalizedRound = (roundLabel ?? '')
+    .toLowerCase()
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (normalizedRound.includes('round of 32')) return 1;
+  if (normalizedRound.includes('round of 16')) return 2;
+  if (normalizedRound.includes('quarter')) return 3;
+  if (normalizedRound.includes('semi')) return 4;
+  if (normalizedRound.includes('3rd') || normalizedRound.includes('third place')) return 5;
+  if (normalizedRound === 'final' || normalizedRound.endsWith(' final')) return 6;
+  return 99;
+}
+
+function buildKnockoutMatchWindows(
+  predictions: OfficePoolPredictionSummary[],
+): MatchPickWindow[] {
+  const matchesByRound = new Map<string, OfficePoolPredictionSummary[]>();
+
+  predictions.forEach((match) => {
+    const roundKey = match.roundLabel?.trim() || match.datetime.slice(0, 10);
+    const currentMatches = matchesByRound.get(roundKey) ?? [];
+    currentMatches.push(match);
+    matchesByRound.set(roundKey, currentMatches);
+  });
+
+  return Array.from(matchesByRound.entries())
+    .sort(([leftRound], [rightRound]) => {
+      const roundDelta = getKnockoutRoundOrder(leftRound) - getKnockoutRoundOrder(rightRound);
+      if (roundDelta !== 0) {
+        return roundDelta;
+      }
+      return leftRound.localeCompare(rightRound);
+    })
+    .map(([roundKey, matches]) => ({
+      id: roundKey,
+      label: roundKey,
+      matchCount: matches.length,
+      matches: matches.sort(
+        (left, right) =>
+          new Date(left.datetime).getTime() - new Date(right.datetime).getTime(),
+      ),
+    }));
 }
 
 function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[], joinSidePickMap: Record<string, string>) {
@@ -380,11 +486,41 @@ function getScoringCopy(mode: OfficePoolMode) {
   return 'Scoring: Round of 32 wins are 2 points, Round of 16 wins are 2 points, Quarter-finals are 3 points, Semi-finals are 5 points, the Final is 10 points, the third-place match is 5 points, and Champion Picks are worth 15 / 10 / 5 for 1st / 2nd / 3rd.';
 }
 
+function CreatorDashboard({
+  leaderboard,
+  isSaving,
+  onSettle,
+}: {
+  leaderboard: NonNullable<ReturnType<typeof useOfficePoolPageData>['leaderboard']>;
+  isSaving: boolean;
+  onSettle: () => void;
+}) {
+  return (
+    <section className="office-pool-panel">
+      <div className="office-pool-panel-head">
+        <h2>Creator Dashboard</h2>
+        {leaderboard.settlementStatus === 'READY' ? (
+          <button className="predict-button office-pool-inline-btn" onClick={onSettle} disabled={isSaving}>
+            {isSaving ? 'Settling...' : 'Settle Pool'}
+          </button>
+        ) : null}
+      </div>
+      <p className="office-pool-copy">
+        Prize pool: {leaderboard.totalPrizePool} PICK
+      </p>
+      <p className="office-pool-copy">
+        {getSettlementCopy(leaderboard.settlementStatus, leaderboard.totalPrizePool)}
+      </p>
+    </section>
+  );
+}
+
 export default function OfficePoolPage() {
   const {
     screen,
     setScreen,
     isLoading,
+    isPoolLoading,
     isSaving,
     error,
     notice,
@@ -398,8 +534,6 @@ export default function OfficePoolPage() {
     picks,
     setPicks,
     sidePicks,
-    joinInviteCode,
-    setJoinInviteCode,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,
@@ -421,14 +555,17 @@ export default function OfficePoolPage() {
     discoverPools,
     scopeExternalId,
     isScopedLaunch,
+    canCreateScopedPool,
     isJoinTemporarilyLocked,
+    goHome,
     openPool,
-    handleInviteLookup,
     handleCreatePool,
     handleJoinPool: submitJoinPool,
     handleSavePicks,
     handleSettlePool,
+    handleShareGroupLink,
   } = useOfficePoolPageData(WORLD_CUP_MODE_CONFIG_MAP);
+  const [activeMatchWindowIndex, setActiveMatchWindowIndex] = useState(0);
 
   const availableTeams = useMemo(() => buildTeamOptions(predictions), [predictions]);
   const groupQualifierCards = useMemo(
@@ -444,6 +581,18 @@ export default function OfficePoolPage() {
     () => (activePool ? getRequiredJoinSidePickCount(activePool.mode, groupQualifierCards) : 0),
     [activePool, groupQualifierCards],
   );
+  const matchPickWindows = useMemo(() => {
+    if (activePool?.mode === 'WORLD_CUP_GROUP_STAGE') {
+      return buildGroupMatchWindows(predictions, groupQualifierCards);
+    }
+
+    if (activePool?.mode === 'WORLD_CUP_KNOCKOUT_STAGE') {
+      return buildKnockoutMatchWindows(predictions);
+    }
+
+    return buildMatchPickWindows(predictions);
+  }, [activePool?.mode, groupQualifierCards, predictions]);
+  const activeMatchWindow = matchPickWindows[activeMatchWindowIndex] ?? null;
   const isJoinReady = !!activePool && requiredJoinSidePickCount > 0 && joinSidePickCount === requiredJoinSidePickCount;
   const lockedSidePickLines = useMemo(
     () => (activePool ? getLockedSidePickLines(activePool.mode, sidePicks, groupQualifierCards) : []),
@@ -502,6 +651,17 @@ export default function OfficePoolPage() {
     }
     setActiveQualifierGroupIndex(0);
   }, [activeQualifierGroupIndex, groupQualifierCards.length]);
+
+  useEffect(() => {
+    if (activeMatchWindowIndex < matchPickWindows.length) {
+      return;
+    }
+    setActiveMatchWindowIndex(0);
+  }, [activeMatchWindowIndex, matchPickWindows.length]);
+
+  useEffect(() => {
+    setActiveMatchWindowIndex(0);
+  }, [activePoolId, screen]);
 
   const handlePickChange = (predictionId: string, option: OfficePoolPickOption) => {
     setPicks((prev) => ({
@@ -582,26 +742,18 @@ export default function OfficePoolPage() {
               <h2>{isScopedLaunch ? 'Play your pool with your friends' : 'Your joined office pools'}</h2>
               <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with locked Champion Picks.' : 'Open a pool you already joined from Telegram group chat.'}</p>
             </div>
-            {isScopedLaunch ? (
+            {isScopedLaunch && canCreateScopedPool ? (
               <button className="predict-button office-pool-cta" onClick={() => setScreen('create')}>
                 Create Pool
               </button>
             ) : null}
           </section>
 
-          {isScopedLaunch ? (
+          {isScopedLaunch && !canCreateScopedPool ? (
             <section className="office-pool-panel">
-              <h2>Join by Invite Code</h2>
-              <div className="office-pool-inline-row">
-                <input
-                  value={joinInviteCode}
-                  onChange={(e) => setJoinInviteCode(e.target.value.toUpperCase())}
-                  placeholder="Invite code"
-                />
-                <button className="predict-button office-pool-inline-btn" onClick={handleInviteLookup} disabled={!joinInviteCode.trim()}>
-                  Open
-                </button>
-              </div>
+              <p className="office-pool-copy">
+                Only Telegram group admins can create a new Office Pool for this group. You can still join any pool that an admin opens here.
+              </p>
             </section>
           ) : null}
 
@@ -625,7 +777,7 @@ export default function OfficePoolPage() {
         </>
       )}
 
-      {screen === 'create' && (
+      {screen === 'create' && canCreateScopedPool && (
         <>
           <PageTopBar title="Create Pool" onBack={() => setScreen('home')} />
           {notice && <div className="office-pool-notice">{notice}</div>}
@@ -708,15 +860,34 @@ export default function OfficePoolPage() {
       {(screen === 'detail' || screen === 'picks') && (
         <>
           <PageTopBar
-            title={screen === 'detail' ? activePool?.name ?? 'Office Pool' : 'Match Picks'}
-            subtitle={screen === 'detail' ? activePool?.inviteCode : activePool?.name}
-            onBack={() => setScreen(screen === 'detail' ? 'home' : 'detail')}
+            title={
+              isPoolLoading
+                ? screen === 'detail'
+                  ? 'Loading Pool'
+                  : 'Loading Picks'
+                : screen === 'detail'
+                  ? activePool?.name ?? 'Office Pool'
+                  : 'Match Picks'
+            }
+            subtitle={
+              isPoolLoading
+                ? 'Fetching the latest pool data'
+                : screen === 'detail'
+                  ? getModeLabel(activePool?.mode ?? 'WORLD_CUP_GROUP_STAGE')
+                  : activePool?.name
+            }
+            backLabel={screen === 'detail' ? 'Dashboard' : 'Pool'}
+            onBack={() => (screen === 'detail' ? goHome() : setScreen('detail'))}
           />
           {notice && <div className="office-pool-notice">{notice}</div>}
           {error && <div className="office-pool-error">{error}</div>}
 
-          {!activePool || activePool.id !== activePoolId ? (
-            <div className="loading">Loading pool...</div>
+          {isPoolLoading || !activePool || activePool.id !== activePoolId ? (
+            <div className="loading">
+              {screen === 'detail'
+                ? 'Loading the latest pool view...'
+                : 'Loading the latest picks...'}
+            </div>
           ) : (
             <>
               {screen === 'detail' && (
@@ -735,11 +906,31 @@ export default function OfficePoolPage() {
                     </div>
 
                     <div className="office-pool-meta-grid">
-                      <div><span>Invite</span><strong>{activePool.inviteCode}</strong></div>
+                      <div><span>Share</span><strong>{activePool.telegramGroupInviteUrl ? 'Group link ready' : 'Share manually'}</strong></div>
                       <div><span>Joined</span><strong>{activePool.participants} players</strong></div>
                       <div><span>Minimum entry</span><strong>{activePool.entryFee} PICK</strong></div>
                       <div><span>Window (UTC)</span><strong>{formatDateTime(activePool.startsAt)} - {formatDateTime(activePool.endsAt)}</strong></div>
                       <div><span>Format</span><strong>{getModeLabel(activePool.mode)}</strong></div>
+                    </div>
+                    <div className="office-pool-form office-pool-share-block">
+                      <p className="office-pool-copy">
+                        {activePool.telegramGroupInviteUrl
+                          ? `Share the Telegram group for ${activePool.telegramGroupName ?? 'this pool'}. New players can join the group first, then open `
+                          : `Share your Telegram group link with new players so they can join the group, then open `}
+                        <strong>/officepool</strong>
+                        {!activePool.telegramGroupInviteUrl ? ' to start playing this pool.' : '.'}
+                      </p>
+                      {activePool.telegramGroupInviteUrl ? (
+                        <div className="office-pool-panel-actions">
+                          <button
+                            className="predict-button office-pool-inline-btn"
+                            onClick={handleShareGroupLink}
+                            type="button"
+                          >
+                            Share Group Link
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </section>
 
@@ -785,26 +976,23 @@ export default function OfficePoolPage() {
                       </section>
 
                       {activePool.isCreator && leaderboard ? (
-                        <section className="office-pool-panel">
-                          <div className="office-pool-panel-head">
-                            <h2>Creator Settlement</h2>
-                            {leaderboard.settlementStatus === 'READY' ? (
-                              <button className="predict-button office-pool-inline-btn" onClick={handleSettlePool} disabled={isSaving}>
-                                {isSaving ? 'Settling...' : 'Settle Pool'}
-                              </button>
-                            ) : null}
-                          </div>
-                          <p className="office-pool-copy">
-                            Prize pool: {leaderboard.totalPrizePool} PICK
-                          </p>
-                          <p className="office-pool-copy">
-                            {getSettlementCopy(leaderboard.settlementStatus, leaderboard.totalPrizePool)}
-                          </p>
-                        </section>
+                        <CreatorDashboard
+                          leaderboard={leaderboard}
+                          isSaving={isSaving}
+                          onSettle={handleSettlePool}
+                        />
                       ) : null}
                     </>
                   ) : (
                     <>
+                      {activePool.isCreator && leaderboard ? (
+                        <CreatorDashboard
+                          leaderboard={leaderboard}
+                          isSaving={isSaving}
+                          onSettle={handleSettlePool}
+                        />
+                      ) : null}
+
                       <section className="office-pool-panel">
                         <h2>Your Entry</h2>
                         <div className="office-pool-entry-card">
@@ -813,8 +1001,8 @@ export default function OfficePoolPage() {
                             <strong>{lockedSidePickLines.length > 0 ? `${lockedSidePickLines.length} saved` : 'Saved on join'}</strong>
                           </div>
                           <div>
-                            <span className="office-pool-copy-label">Invite</span>
-                            <strong>{activePool.inviteCode}</strong>
+                            <span className="office-pool-copy-label">Share Link</span>
+                            <strong>{activePool.telegramGroupInviteUrl ? 'Group share ready' : 'Share manually'}</strong>
                           </div>
                         </div>
                         {lockedSidePickLines.length > 0 ? (
@@ -829,6 +1017,11 @@ export default function OfficePoolPage() {
                         <p className="office-pool-copy">
                           These Champion Picks are locked after you join the pool. Normal match picks stay editable until each match locks.
                         </p>
+                        {!activePool.telegramGroupInviteUrl ? (
+                          <p className="office-pool-copy">
+                            Share your Telegram group link with friends so they can join the group, then open <strong>/officepool</strong> to play this pool.
+                          </p>
+                        ) : null}
                         {sidePickComparisonLines.length > 0 ? (
                           <>
                             <p className="office-pool-copy">
@@ -935,7 +1128,7 @@ export default function OfficePoolPage() {
                   <div className="office-pool-panel-head">
                     <div>
                       <h2>Picks</h2>
-                      <p className="office-pool-copy">Choose Home, Draw, or Away for each match.</p>
+                      <p className="office-pool-copy">Choose Home, Draw, or Away for each match window.</p>
                     </div>
                     <button className="predict-button office-pool-inline-btn" onClick={handleSavePicks} disabled={isSaving || !activePool.isMember}>
                       {isSaving ? 'Saving...' : 'Save Picks'}
@@ -945,9 +1138,40 @@ export default function OfficePoolPage() {
                     <div className="empty"><p>Join this pool first.</p></div>
                   ) : predictions.length === 0 ? (
                     <div className="empty"><p>No matches available for this pool window.</p></div>
+                  ) : !activeMatchWindow ? (
+                    <div className="empty"><p>No match windows available for this pool yet.</p></div>
                   ) : (
-                    <div className="office-pool-match-list">
-                      {predictions.map((match) => {
+                    <>
+                      <div className="office-pool-panel-head">
+                        <div>
+                          <h2>{activeMatchWindow.label}</h2>
+                          <p className="office-pool-copy">
+                            {activePool.mode === 'WORLD_CUP_GROUP_STAGE'
+                              ? 'Group'
+                              : activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+                                ? 'Round'
+                                : 'Match window'} {activeMatchWindowIndex + 1}/{matchPickWindows.length} · {activeMatchWindow.matchCount} matches
+                          </p>
+                        </div>
+                      </div>
+                      <div className="office-pool-inline-row office-pool-inline-row-equal">
+                        <button
+                          className="predict-button office-pool-inline-btn"
+                          onClick={() => setActiveMatchWindowIndex((current) => Math.max(current - 1, 0))}
+                          disabled={activeMatchWindowIndex === 0}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="predict-button office-pool-inline-btn"
+                          onClick={() => setActiveMatchWindowIndex((current) => Math.min(current + 1, matchPickWindows.length - 1))}
+                          disabled={activeMatchWindowIndex >= matchPickWindows.length - 1}
+                        >
+                          Next
+                        </button>
+                      </div>
+                      <div className="office-pool-match-list">
+                      {activeMatchWindow.matches.map((match) => {
                         const resultPick = pickFromResult(match.result);
                         const myPick = picks[match.id];
                         return (
@@ -982,7 +1206,8 @@ export default function OfficePoolPage() {
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </section>
               )}
@@ -994,10 +1219,20 @@ export default function OfficePoolPage() {
   );
 }
 
-function PageTopBar({ title, subtitle, onBack }: { title: string; subtitle?: string; onBack: () => void }) {
+function PageTopBar({
+  title,
+  subtitle,
+  backLabel = 'Back',
+  onBack,
+}: {
+  title: string;
+  subtitle?: string;
+  backLabel?: string;
+  onBack: () => void;
+}) {
   return (
     <div className="office-pool-topbar">
-      <button className="office-pool-back" onClick={onBack}>Back</button>
+      <button className="office-pool-back" onClick={onBack}>{backLabel}</button>
       <div className="office-pool-topbar-copy">
         <h1>{title}</h1>
         {subtitle ? <p>{subtitle}</p> : null}

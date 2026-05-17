@@ -11,9 +11,9 @@ import {
   OfficePoolMemberSummary,
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
+  OfficePoolScopeAccess,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
-  SetOfficePoolSidePickItem,
 } from '../types/OfficePool';
 
 interface TelegramAuthVerifyRequest {
@@ -129,13 +129,21 @@ export const officePoolApi = {
     return response.data;
   },
 
-  getById: async (id: string): Promise<OfficePoolSummary> => {
-    const response = await api.get<OfficePoolSummary>(`/office-pools/${id}`);
+  getScopeAccess: async (scope?: {
+    scopeProvider?: string;
+    scopeExternalId?: string;
+  }): Promise<OfficePoolScopeAccess> => {
+    const response = await api.get<OfficePoolScopeAccess>('/office-pools/scope-access', {
+      params: {
+        scopeProvider: scope?.scopeProvider,
+        scopeExternalId: scope?.scopeExternalId,
+      },
+    });
     return response.data;
   },
 
-  getByInviteCode: async (inviteCode: string): Promise<OfficePoolSummary> => {
-    const response = await api.get<OfficePoolSummary>(`/office-pools/invite/${inviteCode}`);
+  getById: async (id: string): Promise<OfficePoolSummary> => {
+    const response = await api.get<OfficePoolSummary>(`/office-pools/${id}`);
     return response.data;
   },
 
@@ -149,18 +157,8 @@ export const officePoolApi = {
     return response.data;
   },
 
-  setChampionPick: async (id: string, championPickTeamId: string): Promise<OfficePoolMemberSummary> => {
-    const response = await api.post<OfficePoolMemberSummary>(`/office-pools/${id}/champion-pick`, { championPickTeamId });
-    return response.data;
-  },
-
   getSidePicks: async (id: string): Promise<OfficePoolSidePickSummary[]> => {
     const response = await api.get<OfficePoolSidePickSummary[]>(`/office-pools/${id}/side-picks`);
-    return response.data;
-  },
-
-  saveSidePicks: async (id: string, sidePicks: SetOfficePoolSidePickItem[]): Promise<OfficePoolSidePickSummary[]> => {
-    const response = await api.post<OfficePoolSidePickSummary[]>(`/office-pools/${id}/side-picks`, { sidePicks });
     return response.data;
   },
 

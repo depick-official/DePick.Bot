@@ -16,6 +16,8 @@ import {
   SetOfficePoolSidePickItem,
 } from '../types/OfficePool';
 
+const pendingMiniAppAuthTokens = new Map<string, Promise<string>>();
+
 interface DecodedToken {
   sub?: string;
 }
@@ -54,6 +56,24 @@ function endOfDayIso(value: string) {
   return `${value}T23:59:59.999Z`;
 }
 
+function getDefaultCreateMode(
+  worldCupModeConfigMap: Record<OfficePoolMode, HookModeConfig>,
+) {
+  const now = new Date();
+  const eligibleModes = (Object.keys(worldCupModeConfigMap) as OfficePoolMode[])
+    .filter((mode) => {
+      const config = worldCupModeConfigMap[mode];
+      return new Date(endOfDayIso(config.endsAt)) >= now;
+    })
+    .sort(
+      (left, right) =>
+        new Date(startOfDayIso(worldCupModeConfigMap[left].startsAt)).getTime() -
+        new Date(startOfDayIso(worldCupModeConfigMap[right].startsAt)).getTime(),
+    );
+
+  return eligibleModes[0] ?? 'WORLD_CUP_GROUP_STAGE';
+}
+
 function getTelegramAuthQueryData(searchParams: URLSearchParams): TelegramAuthQueryData | null {
   const id = searchParams.get('id');
   const firstName = searchParams.get('first_name');
@@ -75,13 +95,20 @@ function getTelegramAuthQueryData(searchParams: URLSearchParams): TelegramAuthQu
   };
 }
 
-function buildOfficePoolSearch(scopeProvider?: string, scopeExternalId?: string) {
+function buildOfficePoolSearch(
+  scopeProvider?: string,
+  scopeExternalId?: string,
+  poolId?: string,
+) {
   const nextParams = new URLSearchParams();
   if (scopeProvider) {
     nextParams.set('scope_provider', scopeProvider);
   }
   if (scopeExternalId) {
     nextParams.set('scope_external_id', scopeExternalId);
+  }
+  if (poolId) {
+    nextParams.set('pool_id', poolId);
   }
   const nextQuery = nextParams.toString();
   return nextQuery ? `?${nextQuery}` : '';
@@ -108,18 +135,51 @@ function getTelegramWebAppState(searchParams: URLSearchParams): TelegramWebAppSt
 
 function parseOfficePoolScopeFromStartParam(startParam?: string) {
   if (!startParam || !startParam.startsWith('officepool_')) {
-    return { scopeProvider: undefined, scopeExternalId: undefined };
+    return { scopeProvider: undefined, scopeExternalId: undefined, poolId: undefined };
   }
 
-  const scopeExternalId = startParam.slice('officepool_'.length);
+  const payload = startParam.slice('officepool_'.length);
+  const separatorIndex = payload.indexOf('_');
+  if (separatorIndex === -1) {
+    if (!payload) {
+      return { scopeProvider: undefined, scopeExternalId: undefined, poolId: undefined };
+    }
+
+    return {
+      scopeProvider: 'TELEGRAM',
+      scopeExternalId: payload,
+      poolId: undefined,
+    };
+  }
+
+  const scopeExternalId = payload.slice(0, separatorIndex);
+  const poolId = payload.slice(separatorIndex + 1);
   if (!scopeExternalId) {
-    return { scopeProvider: undefined, scopeExternalId: undefined };
+    return { scopeProvider: undefined, scopeExternalId: undefined, poolId: undefined };
   }
 
   return {
     scopeProvider: 'TELEGRAM',
     scopeExternalId,
+    poolId: poolId || undefined,
   };
+}
+
+async function verifyTelegramMiniAppOnce(initData: string) {
+  const existingPromise = pendingMiniAppAuthTokens.get(initData);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const verificationPromise = telegramAuthApi
+    .verifyMiniApp({ initData })
+    .then((response) => response.auth_token)
+    .finally(() => {
+      pendingMiniAppAuthTokens.delete(initData);
+    });
+
+  pendingMiniAppAuthTokens.set(initData, verificationPromise);
+  return verificationPromise;
 }
 
 async function fetchHomePools(scope: {
@@ -127,7 +187,7 @@ async function fetchHomePools(scope: {
   scopeProvider?: string;
   scopeExternalId?: string;
 }) {
-  const [mine, all] = await Promise.all([
+  const [mine, all, scopeAccess] = await Promise.all([
     officePoolApi.listMine(),
     scope.isScopedLaunch
       ? officePoolApi.list({
@@ -135,9 +195,15 @@ async function fetchHomePools(scope: {
           scopeExternalId: scope.scopeExternalId,
         })
       : Promise.resolve([]),
+    scope.isScopedLaunch
+      ? officePoolApi.getScopeAccess({
+          scopeProvider: scope.scopeProvider,
+          scopeExternalId: scope.scopeExternalId,
+        })
+      : Promise.resolve({ canCreate: false }),
   ]);
 
-  return { mine, all };
+  return { mine, all, canCreateScopedPool: scopeAccess.canCreate };
 }
 
 async function fetchPoolContext(poolId: string) {
@@ -193,20 +259,23 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [myPools, setMyPools] = useState<OfficePoolSummary[]>([]);
   const [activePoolId, setActivePoolId] = useState('');
   const [activePool, setActivePool] = useState<OfficePoolSummary | null>(null);
+  const [isPoolLoading, setIsPoolLoading] = useState(false);
   const [poolReloadToken, setPoolReloadToken] = useState(0);
   const [members, setMembers] = useState<OfficePoolMemberSummary[]>([]);
   const [predictions, setPredictions] = useState<OfficePoolPredictionSummary[]>([]);
   const [leaderboard, setLeaderboard] = useState<OfficePoolLeaderboardResponse | null>(null);
   const [picks, setPicks] = useState<Record<string, OfficePoolPickOption>>({});
   const [sidePicks, setSidePicks] = useState<OfficePoolSidePickSummary[]>([]);
-  const [joinInviteCode, setJoinInviteCode] = useState('');
   const [joinSidePickMap, setJoinSidePickMap] = useState<Record<string, string>>({});
   const [activeQualifierGroupIndex, setActiveQualifierGroupIndex] = useState(0);
   const [activePodiumKey, setActivePodiumKey] = useState<PodiumKey>('FIRST');
+  const [canCreateScopedPool, setCanCreateScopedPool] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(tokenUtils.getToken());
 
   const [createName, setCreateName] = useState('');
-  const [createMode, setCreateMode] = useState<OfficePoolMode>('WORLD_CUP_GROUP_STAGE');
+  const [createMode, setCreateMode] = useState<OfficePoolMode>(() =>
+    getDefaultCreateMode(worldCupModeConfigMap),
+  );
   const [createEntryFee, setCreateEntryFee] = useState('10');
   const [createSubmitAttempted, setCreateSubmitAttempted] = useState(false);
   const [createNameTouched, setCreateNameTouched] = useState(false);
@@ -228,6 +297,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const scopeProvider = searchParams.get('scope_provider') ?? startParamScope.scopeProvider;
   const scopeExternalId =
     searchParams.get('scope_external_id') ?? startParamScope.scopeExternalId;
+  const deepLinkedPoolId = searchParams.get('pool_id') ?? startParamScope.poolId;
   const isScopedLaunch = !!scopeProvider && !!scopeExternalId;
 
   const currentUserId = useMemo(() => {
@@ -276,11 +346,8 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
           tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
           nextToken = authResponse.auth_token;
         } else if (telegramWebAppState.initData) {
-          const authResponse = await telegramAuthApi.verifyMiniApp({
-            initData: telegramWebAppState.initData,
-          });
-          tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
-          nextToken = authResponse.auth_token;
+          nextToken = await verifyTelegramMiniAppOnce(telegramWebAppState.initData);
+          tokenUtils.setToken(nextToken, 'TELEGRAM');
         } else if (requiresScopedTelegramAuth) {
           tokenUtils.removeToken();
           throw new Error(
@@ -305,7 +372,11 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
           navigate(
             {
               pathname: '/office-pool',
-              search: buildOfficePoolSearch(scopeProvider, scopeExternalId),
+              search: buildOfficePoolSearch(
+                scopeProvider,
+                scopeExternalId,
+                deepLinkedPoolId ?? undefined,
+              ),
             },
             { replace: true },
           );
@@ -327,6 +398,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     };
   }, [
     authToken,
+    deepLinkedPoolId,
     isScopedLaunch,
     navigate,
     scopeExternalId,
@@ -347,7 +419,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         setIsLoading(true);
         setError(null);
 
-        const { mine, all } = await fetchHomePools({
+        const { mine, all, canCreateScopedPool: nextCanCreateScopedPool } = await fetchHomePools({
           isScopedLaunch,
           scopeProvider,
           scopeExternalId,
@@ -357,6 +429,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
 
         setMyPools(mine);
         setAllPools(all);
+        setCanCreateScopedPool(nextCanCreateScopedPool);
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to refresh office pools:', err);
@@ -376,10 +449,19 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   }, [authReady, isScopedLaunch, scopeExternalId, scopeProvider, sessionToken]);
 
   useEffect(() => {
+    if (!authReady || !sessionToken || !deepLinkedPoolId || activePoolId === deepLinkedPoolId) {
+      return;
+    }
+
+    openPool(deepLinkedPoolId, 'detail');
+  }, [activePoolId, authReady, deepLinkedPoolId, sessionToken]);
+
+  useEffect(() => {
     if (!authReady || !sessionToken || !activePoolId) return;
 
     const loadPoolContext = async () => {
       try {
+        setIsPoolLoading(true);
         setError(null);
         const nextContext = await fetchPoolContext(activePoolId);
 
@@ -392,20 +474,55 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       } catch (err) {
         console.error('Failed to load office pool details:', err);
         setError('Failed to load office pool details');
+      } finally {
+        setIsPoolLoading(false);
       }
     };
 
     void loadPoolContext();
   }, [activePoolId, authReady, poolReloadToken, sessionToken]);
 
+  useEffect(() => {
+    if (screen !== 'create') {
+      return;
+    }
+
+    if (!isScopedLaunch || !canCreateScopedPool) {
+      setScreen('home');
+    }
+  }, [canCreateScopedPool, isScopedLaunch, screen]);
+
+  const resetActivePoolContext = () => {
+    setActivePool(null);
+    setMembers([]);
+    setPredictions([]);
+    setLeaderboard(null);
+    setPicks({});
+    setSidePicks([]);
+  };
+
+  const goHome = () => {
+    navigate(
+      {
+        pathname: '/office-pool',
+        search: buildOfficePoolSearch(scopeProvider, scopeExternalId),
+      },
+      { replace: true },
+    );
+    setScreen('home');
+    setError(null);
+    setIsPoolLoading(false);
+  };
+
   const refreshHome = async () => {
-    const { mine, all } = await fetchHomePools({
+    const { mine, all, canCreateScopedPool: nextCanCreateScopedPool } = await fetchHomePools({
       isScopedLaunch,
       scopeProvider,
       scopeExternalId,
     });
     setMyPools(mine);
     setAllPools(all);
+    setCanCreateScopedPool(nextCanCreateScopedPool);
   };
 
   const refreshHomeInBackground = () => {
@@ -415,29 +532,22 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   };
 
   const openPool = (poolId: string, nextScreen: Screen = 'detail') => {
+    navigate(
+      {
+        pathname: '/office-pool',
+        search: buildOfficePoolSearch(scopeProvider, scopeExternalId, poolId),
+      },
+      { replace: true },
+    );
     setActivePoolId(poolId);
+    resetActivePoolContext();
+    setIsPoolLoading(true);
     setPoolReloadToken((current) => current + 1);
     setJoinSidePickMap({});
     setActiveQualifierGroupIndex(0);
     setActivePodiumKey('FIRST');
-    setSidePicks([]);
     setScreen(nextScreen);
     setError(null);
-  };
-
-  const handleInviteLookup = async () => {
-    try {
-      setError(null);
-      setNotice(null);
-      const code = joinInviteCode.trim().toUpperCase();
-      if (!code) return;
-      const pool = await officePoolApi.getByInviteCode(code);
-      setJoinInviteCode(code);
-      openPool(pool.id, 'detail');
-    } catch (err: any) {
-      console.error('Failed to find office pool by invite:', err);
-      setError(err?.response?.data?.message ?? 'Invite code not found');
-    }
   };
 
   const handleCreatePool = async () => {
@@ -446,6 +556,9 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       setNotice(null);
       setIsSaving(true);
       setCreateSubmitAttempted(true);
+      if (isScopedLaunch && !canCreateScopedPool) {
+        throw new Error('Only Telegram group admins can create an Office Pool for this group');
+      }
       const trimmedName = createName.trim();
       const entryFee = Number(createEntryFee);
       const createModeConfig = worldCupModeConfigMap[createMode];
@@ -480,7 +593,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
 
       const pool = await officePoolApi.create(payload);
       setCreateName('');
-      setCreateMode('WORLD_CUP_GROUP_STAGE');
+      setCreateMode(getDefaultCreateMode(worldCupModeConfigMap));
       setCreateEntryFee('10');
       setCreateSubmitAttempted(false);
       setCreateNameTouched(false);
@@ -505,7 +618,6 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       setError(null);
       setNotice(null);
       const response = await officePoolApi.join(activePool.id, {
-        inviteCode: joinInviteCode.trim().toUpperCase() || activePool.inviteCode,
         sidePicks,
       });
       openPool(response.pool.id, 'detail');
@@ -519,6 +631,24 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleShareGroupLink = () => {
+    if (!activePool?.telegramGroupInviteUrl) {
+      setError('Telegram group share link is unavailable for this pool');
+      return;
+    }
+
+    const groupName = activePool.telegramGroupName?.trim() || 'this Telegram group';
+    const shareText = `Join "${activePool.name}" on DePick Office Pool in ${groupName}. After joining the Telegram group, open /officepool.`;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(activePool.telegramGroupInviteUrl)}&text=${encodeURIComponent(shareText)}`;
+    const telegramWebApp = (globalThis as any).Telegram?.WebApp;
+    if (typeof telegramWebApp?.openTelegramLink === 'function') {
+      telegramWebApp.openTelegramLink(shareUrl);
+      return;
+    }
+
+    globalThis.open(shareUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleSavePicks = async () => {
@@ -567,14 +697,13 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     myPools,
     activePoolId,
     activePool,
+    isPoolLoading,
     members,
     predictions,
     leaderboard,
     picks,
     setPicks,
     sidePicks,
-    joinInviteCode,
-    setJoinInviteCode,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,
@@ -596,12 +725,14 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     discoverPools,
     scopeExternalId,
     isScopedLaunch,
+    canCreateScopedPool,
     isJoinTemporarilyLocked,
+    goHome,
     openPool,
-    handleInviteLookup,
     handleCreatePool,
     handleJoinPool,
     handleSavePicks,
     handleSettlePool,
+    handleShareGroupLink,
   };
 }

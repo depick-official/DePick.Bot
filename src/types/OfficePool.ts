@@ -11,6 +11,9 @@ export interface OfficePoolSummary {
   creatorUserId: string;
   creatorUsername: string;
   inviteCode: string;
+  deepLinkUrl?: string | null;
+  telegramGroupName?: string | null;
+  telegramGroupInviteUrl?: string | null;
   status: OfficePoolStatus;
   mode: OfficePoolMode;
   accessPolicy: OfficePoolAccessPolicy;
@@ -26,6 +29,10 @@ export interface OfficePoolSummary {
   isCreator: boolean;
   createTime: string;
   updateTime: string;
+}
+
+export interface OfficePoolScopeAccess {
+  canCreate: boolean;
 }
 
 export interface CreateOfficePoolRequest {
@@ -74,6 +81,7 @@ export interface OfficePoolPredictionSummary {
   id: string;
   datetime: string;
   fixture: string;
+  roundLabel?: string | null;
   tournament: string;
   status: string;
   result: 'HOME' | 'AWAY' | 'TIE' | 'PENDING' | 'ERROR';

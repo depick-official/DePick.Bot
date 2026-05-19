@@ -59,6 +59,22 @@ export interface CreatePredictionRecordRequest {
   awayTeamPool: number;
 }
 
+// M6.2.d — BE returns this in place of a PredictionRecord when the user has
+// `useEoaForPrediction=true` AND a real EOA on file. Chain submission is
+// deferred to the Mini App at `signingUrl`; the PredictionRecord row is written
+// by /eoa/signing-callback (M6.3) once the relayer-broadcast tx confirms.
+export interface PendingSessionResponse {
+  kind: 'pending';
+  signingUrl: string;
+  sessionId: string;
+  ttlMs: number;
+}
+
+// Discriminated union returned by POST /prediction-records. Callers must check
+// `'kind' in result && result.kind === 'pending'` BEFORE treating the response
+// as a PredictionRecord — otherwise the UI false-positives a success.
+export type CreatePredictionResult = PredictionRecord | PendingSessionResponse;
+
 export interface ClaimPredictionRecordRequest {
   predictionId: string;
 }

@@ -27,7 +27,7 @@ export interface Prediction {
     awayOdds: number;
     marketId: number | null;          // null for NAIVE
     marketContractAddress: string;
-    marketCollateralToken: number;    // PICK; replaces totalPoolAmountToken at M4.5
+    marketCollateralToken: number;    // PICK; chain-native depth (M4.1 / M4.5)
     marketVolumeToken: { home: number; away: number; total: number };
     tournament?: string;
     status: PredictionGameStatus | string;

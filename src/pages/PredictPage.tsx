@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { predictionApi } from '../services/api';
 import { Prediction } from '../types/Prediction';
 import { formatNumber } from '../utils/math';
-import { tokenUtils } from '../utils/token';
 import PredictionModal from '../components/PredictionModal';
 import '../styles/pages.scss';
 
 export default function PredictPage() {
-  const [searchParams] = useSearchParams();
   const { matchId } = useParams<{ matchId?: string }>();
   const navigate = useNavigate();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -18,18 +16,9 @@ export default function PredictPage() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const authToken = searchParams.get('auth_token');
-
-    if (!authToken) {
-      setError('Missing authentication token');
-      setIsLoading(false);
-      return;
-    }
-
-    // Store JWT token for API calls
-    tokenUtils.setToken(authToken, 'TELEGRAM');
-
-    // Fetch predictions or specific match
+    // M7.4.6 — Auth lives in localStorage via App.tsx's bootstrapAuth.
+    // This page no longer reads `?auth_token=` from the URL; the bot mints
+    // URLs without any embedded credential.
     const fetchData = async () => {
       try {
         setIsLoading(true);
@@ -54,7 +43,7 @@ export default function PredictPage() {
     };
 
     fetchData();
-  }, [searchParams, matchId]);
+  }, [matchId]);
 
   const handlePredictClick = (match: Prediction) => {
     setSelectedMatch(match);
@@ -67,8 +56,7 @@ export default function PredictPage() {
 
     // If we're on a specific match page, navigate back to list
     if (matchId) {
-      const authToken = searchParams.get('auth_token');
-      navigate(`/predict?auth_token=${authToken}`);
+      navigate('/predict');
     }
   };
 

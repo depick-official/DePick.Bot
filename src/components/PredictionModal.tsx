@@ -113,7 +113,28 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
         awayTeamPool: match.marketVolumeToken.away
       };
 
-      await predictionRecordApi.createPredictionRecord(formData);
+      const response = await predictionRecordApi.createPredictionRecord(formData);
+
+      // M6.2.d / M6.2.f — BE may return a PendingSessionResponse instead of a
+      // placed PredictionRecord when the user opted into the EOA + ERC-2771
+      // flow. Nothing has been submitted on-chain yet — the user must sign in
+      // the sign-app Mini App. The BE has already pushed a "Sign with Wallet"
+      // inline button into the user's Telegram chat (M6.2.f, mirrors futurize
+      // predict.command.ts:320-336). We just close this Mini App so the user
+      // lands back in the chat where the button is waiting. We MUST NOT show
+      // the success modal — no prediction exists yet.
+      if (response && 'kind' in response && response.kind === 'pending') {
+        const tg = (window as any).Telegram?.WebApp;
+        if (tg?.close) {
+          tg.close();
+        } else {
+          // Fallback for non-Telegram contexts (desktop dev, etc.) where the
+          // BE chat-message dispatch doesn't apply.
+          alert('EOA prediction signing required. Open: ' + response.signingUrl);
+        }
+        return;
+      }
+
       setShowSuccess(true);
       if (onPredictionSuccess) {
         onPredictionSuccess();

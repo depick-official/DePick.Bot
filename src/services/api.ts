@@ -1,7 +1,8 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { tokenUtils } from '../utils/token';
+import { bootstrapAuth } from './auth-bootstrap';
 import { Prediction, QuoteRequest, QuoteResponse } from '../types/Prediction';
-import { PredictionRecord, CreatePredictionRecordRequest } from '../types/PredictionRecord';
+import { PredictionRecord, CreatePredictionRecordRequest, CreatePredictionResult } from '../types/PredictionRecord';
 import { User } from '../types/User';
 
 // Create axios instance
@@ -31,16 +32,62 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - handle auth errors
+// M7.4.6 — Response interceptor: silent JWT refresh on 401.
+// The bootstrap JWT has a 1h lifetime; if a request hits 401 we re-run
+// `bootstrapAuth()` (a fresh initData read + /auth/telegram/webapp call),
+// swap the token, and retry the original request once. Single-flight
+// guarded so a burst of 401s only refreshes once.
+let isRefreshing = false;
+let pendingQueue: Array<(token: string | null) => void> = [];
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      tokenUtils.removeToken();
-      // For bot context, we just fail rather than redirect
-      console.error('Authentication failed');
+  async (error) => {
+    const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const status = error.response?.status;
+
+    // Only refresh-and-retry on 401, and only once per request. The bootstrap
+    // endpoint itself must never recurse here.
+    const isBootstrap = typeof original?.url === 'string' && original.url.includes('/auth/telegram/webapp');
+    if (status !== 401 || !original || original._retried || isBootstrap) {
+      if (status === 401) {
+        tokenUtils.removeToken();
+        console.error('Authentication failed (no retry available)');
+      }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+    original._retried = true;
+
+    if (isRefreshing) {
+      // Park behind the in-flight refresh.
+      return new Promise((resolve, reject) => {
+        pendingQueue.push((newToken) => {
+          if (!newToken) {
+            reject(error);
+            return;
+          }
+          original.headers.Authorization = `Bearer ${newToken}`;
+          resolve(api(original));
+        });
+      });
+    }
+
+    isRefreshing = true;
+    try {
+      const newToken = await bootstrapAuth();
+      pendingQueue.forEach((cb) => cb(newToken));
+      pendingQueue = [];
+      original.headers.Authorization = `Bearer ${newToken}`;
+      return api(original);
+    } catch (refreshErr) {
+      pendingQueue.forEach((cb) => cb(null));
+      pendingQueue = [];
+      tokenUtils.removeToken();
+      console.error('Authentication refresh failed', refreshErr);
+      return Promise.reject(error);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 
@@ -67,8 +114,13 @@ export const predictionApi = {
 
 // Prediction Record API
 export const predictionRecordApi = {
-  createPredictionRecord: async (data: CreatePredictionRecordRequest): Promise<PredictionRecord> => {
-    const response = await api.post<PredictionRecord>('/prediction-records', data);
+  // M6.2.d — Return type widened to a discriminated union: BE may return a
+  // PendingSessionResponse (kind='pending') instead of a placed PredictionRecord
+  // when the user is opted into the EOA + ERC-2771 flow. Callers MUST
+  // discriminate before treating the response as a placed record — otherwise
+  // the UI false-positives a success modal for an unsubmitted prediction.
+  createPredictionRecord: async (data: CreatePredictionRecordRequest): Promise<CreatePredictionResult> => {
+    const response = await api.post<CreatePredictionResult>('/prediction-records', data);
     return response.data;
   },
 

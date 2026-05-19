@@ -91,6 +91,72 @@ api.interceptors.response.use(
   }
 );
 
+// ── Deposit (M7.5) ────────────────────────────────────────────────────────────
+
+export interface DepositTokenSpec {
+  address: string;
+  symbol: string;
+  decimals: number;
+}
+
+export interface DepositChainSpec {
+  key: string;       // e.g. 'kaia'
+  chainId: number;
+  tokens: DepositTokenSpec[];
+}
+
+export interface DepositConfig {
+  chains: DepositChainSpec[];
+  pick: { address: string; decimals: number };
+}
+
+export interface DepositQuote {
+  pickRawAmount: string;
+  ratioWAD: string;
+  ratioAgeMs: number;
+}
+
+export interface DepositSession {
+  sessionId: string;
+  signingUrl: string;
+  ttlMs: number;
+  stablecoinDepositId: string;
+}
+
+export const depositApi = {
+  getConfig: async (): Promise<DepositConfig> => {
+    const response = await api.get<DepositConfig>('/deposits/config');
+    return response.data;
+  },
+
+  // Live PICK quote for a stablecoin amount. BE caches the ratioWAD for
+  // 120 s so debounced typing doesn't hammer the chain RPC.
+  getQuote: async (
+    chain: string,
+    tokenAddress: string,
+    rawAmount: string,
+  ): Promise<DepositQuote> => {
+    const response = await api.get<DepositQuote>('/deposits/quote', {
+      params: { chain, tokenAddress, rawAmount },
+    });
+    return response.data;
+  },
+
+  // Returns a signingUrl pointing at the sign-app session-load page.
+  createSession: async (
+    chain: string,
+    tokenAddress: string,
+    rawAmount: string,
+  ): Promise<DepositSession> => {
+    const response = await api.post<DepositSession>('/deposits/session', {
+      chain,
+      tokenAddress,
+      rawAmount,
+    });
+    return response.data;
+  },
+};
+
 // Prediction API
 export const predictionApi = {
   getPredictionById: async (id: string): Promise<Prediction> => {

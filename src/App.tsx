@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
 import MiniGamePage from './pages/MiniGamePage';
+import DepositPage from './pages/DepositPage';
 import { bootstrapAuth } from './services/auth-bootstrap';
 
 type AuthState =
@@ -48,6 +49,7 @@ function App() {
       <Route path="/predict" element={<PredictPage />} />
       <Route path="/predict/:matchId" element={<PredictPage />} />
       <Route path="/mini-game" element={<MiniGamePage />} />
+      <Route path="/deposit" element={<DepositPage />} />
     </Routes>
   );
 }

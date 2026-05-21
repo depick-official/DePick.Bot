@@ -20,6 +20,7 @@ interface GroupQualifierCard {
   groupKey: string;
   label: string;
   teams: TeamOption[];
+  qualifierSlotKeys: GroupQualifierSlotKey[];
 }
 
 interface MatchPickWindow {
@@ -65,13 +66,30 @@ const utcDateTimeFormatter = new Intl.DateTimeFormat('en', {
   timeZoneName: 'short',
 });
 
+const GROUP_QUALIFIER_SLOT_KEYS = ['FIRST', 'SECOND', 'THIRD'] as const;
+const WORLD_CUP_GROUP_STAGE_QUALIFIER_COUNT_BY_GROUP: Record<string, number> = {
+  GROUP_A: 3,
+  GROUP_B: 3,
+  GROUP_C: 2,
+  GROUP_D: 3,
+  GROUP_E: 3,
+  GROUP_F: 3,
+  GROUP_G: 3,
+  GROUP_H: 2,
+  GROUP_I: 2,
+  GROUP_J: 3,
+  GROUP_K: 3,
+  GROUP_L: 2,
+};
+type GroupQualifierSlotKey = typeof GROUP_QUALIFIER_SLOT_KEYS[number];
+
 const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
   {
     mode: 'WORLD_CUP_GROUP_STAGE',
     title: 'World Cup Group Stage',
     badge: 'Incoming',
-    description: 'Play the 2026 World Cup opening phase with group-stage match picks and top-2 qualifiers for every group.',
-    championPickLabel: 'Players choose Champion Picks for 1st and 2nd place in each group before joining. Those Champion Picks lock immediately after join.',
+    description: 'Play the 2026 World Cup opening phase with group-stage match picks and the required qualifying places for every group.',
+    championPickLabel: 'Players choose Champion Picks for the required qualifying places in each group before joining. Those Champion Picks lock immediately after join.',
     startsAt: '2026-06-11',
     endsAt: '2026-06-27',
   },
@@ -103,6 +121,26 @@ function formatDate(value: string) {
 
 function formatDateWindowLabel(value: string) {
   return utcDateFormatter.format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function getGroupQualifierSlotKeys(groupKey: string): GroupQualifierSlotKey[] {
+  const qualifierCount = WORLD_CUP_GROUP_STAGE_QUALIFIER_COUNT_BY_GROUP[groupKey] ?? 2;
+  return GROUP_QUALIFIER_SLOT_KEYS.slice(0, qualifierCount);
+}
+
+function getGroupQualifierSidePickKey(groupKey: string, slotKey: GroupQualifierSlotKey) {
+  return `${groupKey}_${slotKey}`;
+}
+
+function formatGroupQualifierSlotLabel(slotKey: GroupQualifierSlotKey) {
+  switch (slotKey) {
+    case 'FIRST':
+      return '1st';
+    case 'SECOND':
+      return '2nd';
+    case 'THIRD':
+      return '3rd';
+  }
 }
 
 function getModeLabel(mode: OfficePoolMode) {
@@ -230,6 +268,9 @@ function buildGroupQualifierCards(predictions: OfficePoolPredictionSummary[]): G
       groupKey: `GROUP_${String.fromCharCode(65 + index)}`,
       label: `Group ${String.fromCharCode(65 + index)}`,
       teams: component.teams,
+      qualifierSlotKeys: getGroupQualifierSlotKeys(
+        `GROUP_${String.fromCharCode(65 + index)}`,
+      ),
     }));
 }
 
@@ -334,11 +375,17 @@ function buildKnockoutMatchWindows(
 
 function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[], joinSidePickMap: Record<string, string>) {
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
-    return groupCards.reduce((count, groupCard) => (
-      count
-      + (joinSidePickMap[`${groupCard.groupKey}_FIRST`] ? 1 : 0)
-      + (joinSidePickMap[`${groupCard.groupKey}_SECOND`] ? 1 : 0)
-    ), 0);
+    return groupCards.reduce(
+      (count, groupCard) =>
+        count +
+        groupCard.qualifierSlotKeys.reduce(
+          (groupCount, slotKey) =>
+            groupCount +
+            (joinSidePickMap[getGroupQualifierSidePickKey(groupCard.groupKey, slotKey)] ? 1 : 0),
+          0,
+        ),
+      0,
+    );
   }
 
   return PODIUM_KEYS.reduce((count, key) => count + (joinSidePickMap[key] ? 1 : 0), 0);
@@ -346,7 +393,10 @@ function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCa
 
 function getRequiredJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[]) {
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
-    return groupCards.length * 2;
+    return groupCards.reduce(
+      (count, groupCard) => count + groupCard.qualifierSlotKeys.length,
+      0,
+    );
   }
 
   return PODIUM_KEYS.length;
@@ -358,18 +408,13 @@ function buildJoinSidePickPayload(
   joinSidePickMap: Record<string, string>,
 ) {
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
-    return groupCards.flatMap((groupCard) => ([
-      {
+    return groupCards.flatMap((groupCard) =>
+      groupCard.qualifierSlotKeys.map((slotKey) => ({
         type: 'GROUP_QUALIFIER' as const,
-        key: `${groupCard.groupKey}_FIRST`,
-        teamId: joinSidePickMap[`${groupCard.groupKey}_FIRST`],
-      },
-      {
-        type: 'GROUP_QUALIFIER' as const,
-        key: `${groupCard.groupKey}_SECOND`,
-        teamId: joinSidePickMap[`${groupCard.groupKey}_SECOND`],
-      },
-    ]));
+        key: getGroupQualifierSidePickKey(groupCard.groupKey, slotKey),
+        teamId: joinSidePickMap[getGroupQualifierSidePickKey(groupCard.groupKey, slotKey)],
+      })),
+    );
   }
 
   return PODIUM_KEYS.map((key) => ({
@@ -391,12 +436,23 @@ function getLockedSidePickLines(
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
     return groupCards
       .map((groupCard) => {
-        const firstTeamName = getSidePickTeamName(sidePicks, 'GROUP_QUALIFIER', `${groupCard.groupKey}_FIRST`);
-        const secondTeamName = getSidePickTeamName(sidePicks, 'GROUP_QUALIFIER', `${groupCard.groupKey}_SECOND`);
-        if (!firstTeamName || !secondTeamName) {
+        const slotLines = groupCard.qualifierSlotKeys
+          .map((slotKey) => {
+            const teamName = getSidePickTeamName(
+              sidePicks,
+              'GROUP_QUALIFIER',
+              getGroupQualifierSidePickKey(groupCard.groupKey, slotKey),
+            );
+            if (!teamName) {
+              return null;
+            }
+            return `${formatGroupQualifierSlotLabel(slotKey)}: ${teamName}`;
+          })
+          .filter((line): line is string => !!line);
+        if (slotLines.length !== groupCard.qualifierSlotKeys.length) {
           return null;
         }
-        return `${groupCard.label}: ${firstTeamName} / ${secondTeamName}`;
+        return `${groupCard.label}: ${slotLines.join(' / ')}`;
       })
       .filter((line): line is string => !!line);
   }
@@ -426,19 +482,48 @@ function getSidePickComparisonLines(
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
     return groupCards
       .map((groupCard) => {
-        const firstKey = `${groupCard.groupKey}_FIRST`;
-        const secondKey = `${groupCard.groupKey}_SECOND`;
-        const userFirst = getSidePickTeamName(userSidePicks, 'GROUP_QUALIFIER', firstKey);
-        const userSecond = getSidePickTeamName(userSidePicks, 'GROUP_QUALIFIER', secondKey);
-        const resolvedFirst = getSidePickTeamName(resolvedSidePicks, 'GROUP_QUALIFIER', firstKey);
-        const resolvedSecond = getSidePickTeamName(resolvedSidePicks, 'GROUP_QUALIFIER', secondKey);
+        const comparisons = groupCard.qualifierSlotKeys
+          .map((slotKey) => {
+            const key = getGroupQualifierSidePickKey(groupCard.groupKey, slotKey);
+            const userTeam = getSidePickTeamName(userSidePicks, 'GROUP_QUALIFIER', key);
+            const resolvedTeam = getSidePickTeamName(
+              resolvedSidePicks,
+              'GROUP_QUALIFIER',
+              key,
+            );
+            if (!resolvedTeam) {
+              return null;
+            }
+            return {
+              label: formatGroupQualifierSlotLabel(slotKey),
+              userTeam,
+              resolvedTeam,
+            };
+          })
+          .filter(
+            (
+              comparison,
+            ): comparison is {
+              label: string;
+              userTeam: string | null;
+              resolvedTeam: string;
+            } => !!comparison,
+          );
 
-        if (!resolvedFirst || !resolvedSecond) {
+        if (comparisons.length !== groupCard.qualifierSlotKeys.length) {
           return null;
         }
 
-        const isCorrect = userFirst === resolvedFirst && userSecond === resolvedSecond;
-        return `${groupCard.label}: ${userFirst ?? '-'} / ${userSecond ?? '-'} · Actual: ${resolvedFirst} / ${resolvedSecond}${isCorrect ? ' · Correct' : ''}`;
+        const isCorrect = comparisons.every(
+          (comparison) => comparison.userTeam === comparison.resolvedTeam,
+        );
+        const userLine = comparisons
+          .map((comparison) => `${comparison.label}: ${comparison.userTeam ?? '-'}`)
+          .join(' / ');
+        const actualLine = comparisons
+          .map((comparison) => `${comparison.label}: ${comparison.resolvedTeam}`)
+          .join(' / ');
+        return `${groupCard.label}: ${userLine} · Actual: ${actualLine}${isCorrect ? ' · Correct' : ''}`;
       })
       .filter((line): line is string => !!line);
   }
@@ -670,19 +755,24 @@ export default function OfficePoolPage() {
     }));
   };
 
-  const handleGroupQualifierPick = (groupKey: string, slot: 'FIRST' | 'SECOND', teamId: string) => {
-    const firstKey = `${groupKey}_FIRST`;
-    const secondKey = `${groupKey}_SECOND`;
+  const handleGroupQualifierPick = (
+    groupKey: string,
+    slot: GroupQualifierSlotKey,
+    teamId: string,
+  ) => {
+    const slotKeys = getGroupQualifierSlotKeys(groupKey);
 
     setJoinSidePickMap((prev) => {
       const next = { ...prev };
-      const currentKey = slot === 'FIRST' ? firstKey : secondKey;
-      const otherKey = slot === 'FIRST' ? secondKey : firstKey;
+      const currentKey = getGroupQualifierSidePickKey(groupKey, slot);
 
       next[currentKey] = teamId;
-      if (next[otherKey] === teamId) {
-        next[otherKey] = '';
-      }
+      slotKeys.forEach((slotKey) => {
+        const sidePickKey = getGroupQualifierSidePickKey(groupKey, slotKey);
+        if (slotKey !== slot && next[sidePickKey] === teamId) {
+          next[sidePickKey] = '';
+        }
+      });
       return next;
     });
   };
@@ -940,7 +1030,7 @@ export default function OfficePoolPage() {
                         <h2>Join Pool</h2>
                         <p className="office-pool-copy">
                           {activePool.mode === 'WORLD_CUP_GROUP_STAGE'
-                            ? 'Choose your Champion Picks for 1st and 2nd place in every group before you join. These Champion Picks lock immediately after join.'
+                            ? 'Choose your Champion Picks for the required qualifying places in every group before you join. These Champion Picks lock immediately after join.'
                             : 'Choose your Champion Picks for final 1st, 2nd, and 3rd place before you join. These Champion Picks lock immediately after join.'}
                         </p>
                         {isJoinTemporarilyLocked ? (
@@ -1303,14 +1393,11 @@ function GroupQualifierPicker({
   joinSidePickMap: Record<string, string>;
   onBack: () => void;
   onNext: () => void;
-  onPick: (groupKey: string, slot: 'FIRST' | 'SECOND', teamId: string) => void;
+  onPick: (groupKey: string, slot: GroupQualifierSlotKey, teamId: string) => void;
 }) {
   if (!activeGroupCard) {
     return <div className="empty"><p>No eligible teams found for this pool yet.</p></div>;
   }
-
-  const firstKey = `${activeGroupCard.groupKey}_FIRST`;
-  const secondKey = `${activeGroupCard.groupKey}_SECOND`;
 
   return (
     <>
@@ -1330,20 +1417,22 @@ function GroupQualifierPicker({
             <img src={team.logo} alt={team.name} />
             <strong>{team.name}</strong>
             <div className="office-pool-pick-row office-pool-sidepick-row">
-              <button
-                className={`office-pool-pick-btn ${joinSidePickMap[firstKey] === team.id ? 'office-pool-pick-selected' : ''}`}
-                onClick={() => onPick(activeGroupCard.groupKey, 'FIRST', team.id)}
-                type="button"
-              >
-                1st
-              </button>
-              <button
-                className={`office-pool-pick-btn ${joinSidePickMap[secondKey] === team.id ? 'office-pool-pick-selected' : ''}`}
-                onClick={() => onPick(activeGroupCard.groupKey, 'SECOND', team.id)}
-                type="button"
-              >
-                2nd
-              </button>
+              {activeGroupCard.qualifierSlotKeys.map((slotKey) => {
+                const sidePickKey = getGroupQualifierSidePickKey(
+                  activeGroupCard.groupKey,
+                  slotKey,
+                );
+                return (
+                  <button
+                    key={slotKey}
+                    className={`office-pool-pick-btn ${joinSidePickMap[sidePickKey] === team.id ? 'office-pool-pick-selected' : ''}`}
+                    onClick={() => onPick(activeGroupCard.groupKey, slotKey, team.id)}
+                    type="button"
+                  >
+                    {formatGroupQualifierSlotLabel(slotKey)}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}

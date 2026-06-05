@@ -100,8 +100,10 @@ export interface DepositTokenSpec {
 }
 
 export interface DepositChainSpec {
-  key: string;       // e.g. 'kaia'
+  key: string;             // rail key, e.g. 'kairos' | 'kaia'
   chainId: number;
+  chainName?: string;      // display label for the chain pulldown (e.g. 'Kairos', 'KAIA')
+  chainCurrency?: string;  // native gas symbol (informational)
   tokens: DepositTokenSpec[];
 }
 

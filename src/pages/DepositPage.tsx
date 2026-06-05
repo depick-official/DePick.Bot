@@ -188,6 +188,40 @@ export default function DepositPage() {
         <p>Deposit a stablecoin to receive PICK</p>
       </div>
 
+      {config.chains.length > 1 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 8, color: '#cac5d6', fontSize: 13 }}>
+            Chain
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {config.chains.map((c) => {
+              const selected = c.key === selectedChain;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => {
+                    setSelectedChain(c.key);
+                    // Tokens are per-chain — reset selection to the new chain's first token.
+                    setSelectedToken(c.tokens[0]?.address ?? '');
+                  }}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    border: selected ? '2px solid #f5a623' : '1px solid #555',
+                    background: selected ? '#3a2d4a' : 'transparent',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: selected ? 700 : 400,
+                  }}
+                >
+                  {c.chainName ?? c.key}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', marginBottom: 8, color: '#cac5d6', fontSize: 13 }}>
           Token

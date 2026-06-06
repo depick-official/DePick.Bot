@@ -1,5 +1,6 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { tokenUtils } from '../utils/token';
+import { bootstrapAuth } from './auth-bootstrap';
 import { Prediction } from '../types/Prediction';
 import { PredictionRecord, CreatePredictionRecordRequest } from '../types/PredictionRecord';
 import { User } from '../types/User';
@@ -15,25 +16,6 @@ import {
   OfficePoolSidePickSummary,
   OfficePoolSummary,
 } from '../types/OfficePool';
-
-interface TelegramAuthVerifyRequest {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
-}
-
-interface TelegramAuthVerifyResponse {
-  success: boolean;
-  auth_token: string;
-}
-
-interface TelegramMiniAppVerifyRequest {
-  initData: string;
-}
 
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
@@ -63,15 +45,58 @@ api.interceptors.request.use(
 // Response interceptor - handle auth errors
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      tokenUtils.removeToken();
-      // For bot context, we just fail rather than redirect
-      console.error('Authentication failed');
+  async (error) => {
+    const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const status = error.response?.status;
+    const isBootstrap =
+      typeof original?.url === 'string' && original.url.includes('/auth/telegram/webapp');
+
+    if (status !== 401 || !original || original._retried || isBootstrap) {
+      if (status === 401) {
+        tokenUtils.removeToken();
+        console.error('Authentication failed (no retry available)');
+      }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    original._retried = true;
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        pendingQueue.push((newToken) => {
+          if (!newToken) {
+            reject(error);
+            return;
+          }
+
+          original.headers.Authorization = `Bearer ${newToken}`;
+          resolve(api(original));
+        });
+      });
+    }
+
+    isRefreshing = true;
+
+    try {
+      const newToken = await bootstrapAuth();
+      pendingQueue.forEach((callback) => callback(newToken));
+      pendingQueue = [];
+      original.headers.Authorization = `Bearer ${newToken}`;
+      return api(original);
+    } catch (refreshErr) {
+      pendingQueue.forEach((callback) => callback(null));
+      pendingQueue = [];
+      tokenUtils.removeToken();
+      console.error('Authentication refresh failed', refreshErr);
+      return Promise.reject(error);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
+
+let isRefreshing = false;
+let pendingQueue: Array<(token: string | null) => void> = [];
 
 // Prediction API
 export const predictionApi = {
@@ -189,26 +214,6 @@ export const officePoolApi = {
 
   settle: async (id: string): Promise<OfficePoolLeaderboardResponse> => {
     const response = await api.post<OfficePoolLeaderboardResponse>(`/office-pools/${id}/settle`);
-    return response.data;
-  },
-};
-
-export const telegramAuthApi = {
-  verify: async (data: TelegramAuthVerifyRequest): Promise<TelegramAuthVerifyResponse> => {
-    const response = await api.post<TelegramAuthVerifyResponse>('/auth/telegram/verify', data, {
-      headers: {
-        Authorization: undefined,
-      },
-    });
-    return response.data;
-  },
-
-  verifyMiniApp: async (data: TelegramMiniAppVerifyRequest): Promise<TelegramAuthVerifyResponse> => {
-    const response = await api.post<TelegramAuthVerifyResponse>('/auth/telegram/miniapp/verify', data, {
-      headers: {
-        Authorization: undefined,
-      },
-    });
     return response.data;
   },
 };

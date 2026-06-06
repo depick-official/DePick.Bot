@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
-import { officePoolApi, telegramAuthApi } from '../services/api';
+import { officePoolApi } from '../services/api';
 import { tokenUtils } from '../utils/token';
 import {
   CreateOfficePoolRequest,
@@ -16,24 +16,11 @@ import {
   SetOfficePoolSidePickItem,
 } from '../types/OfficePool';
 
-const pendingMiniAppAuthTokens = new Map<string, Promise<string>>();
-
 interface DecodedToken {
   sub?: string;
 }
 
-interface TelegramAuthQueryData {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
-}
-
 interface TelegramWebAppState {
-  initData?: string;
   startParam?: string;
 }
 
@@ -74,27 +61,6 @@ function getDefaultCreateMode(
   return eligibleModes[0] ?? 'WORLD_CUP_GROUP_STAGE';
 }
 
-function getTelegramAuthQueryData(searchParams: URLSearchParams): TelegramAuthQueryData | null {
-  const id = searchParams.get('id');
-  const firstName = searchParams.get('first_name');
-  const authDate = searchParams.get('auth_date');
-  const hash = searchParams.get('hash');
-
-  if (!id || !firstName || !authDate || !hash) {
-    return null;
-  }
-
-  return {
-    id: Number(id),
-    first_name: firstName,
-    last_name: searchParams.get('last_name') ?? undefined,
-    username: searchParams.get('username') ?? undefined,
-    photo_url: searchParams.get('photo_url') ?? undefined,
-    auth_date: Number(authDate),
-    hash,
-  };
-}
-
 function buildOfficePoolSearch(
   scopeProvider?: string,
   scopeExternalId?: string,
@@ -116,10 +82,6 @@ function buildOfficePoolSearch(
 
 function getTelegramWebAppState(searchParams: URLSearchParams): TelegramWebAppState {
   const telegramWebApp = (globalThis as any).Telegram?.WebApp;
-  const initData =
-    typeof telegramWebApp?.initData === 'string' && telegramWebApp.initData.length > 0
-      ? telegramWebApp.initData
-      : undefined;
   const startParamFromInit =
     typeof telegramWebApp?.initDataUnsafe?.start_param === 'string' &&
     telegramWebApp.initDataUnsafe.start_param.length > 0
@@ -128,7 +90,6 @@ function getTelegramWebAppState(searchParams: URLSearchParams): TelegramWebAppSt
   const startParamFromQuery = searchParams.get('tgWebAppStartParam') ?? undefined;
 
   return {
-    initData,
     startParam: startParamFromInit ?? startParamFromQuery,
   };
 }
@@ -163,23 +124,6 @@ function parseOfficePoolScopeFromStartParam(startParam?: string) {
     scopeExternalId,
     poolId: poolId || undefined,
   };
-}
-
-async function verifyTelegramMiniAppOnce(initData: string) {
-  const existingPromise = pendingMiniAppAuthTokens.get(initData);
-  if (existingPromise) {
-    return existingPromise;
-  }
-
-  const verificationPromise = telegramAuthApi
-    .verifyMiniApp({ initData })
-    .then((response) => response.auth_token)
-    .finally(() => {
-      pendingMiniAppAuthTokens.delete(initData);
-    });
-
-  pendingMiniAppAuthTokens.set(initData, verificationPromise);
-  return verificationPromise;
 }
 
 async function fetchHomePools(scope: {
@@ -249,7 +193,6 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>('home');
-  const [authReady, setAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -270,7 +213,9 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [activeQualifierGroupIndex, setActiveQualifierGroupIndex] = useState(0);
   const [activePodiumKey, setActivePodiumKey] = useState<PodiumKey>('FIRST');
   const [canCreateScopedPool, setCanCreateScopedPool] = useState(false);
-  const [sessionToken, setSessionToken] = useState<string | null>(tokenUtils.getToken());
+  const [sessionToken, setSessionToken] = useState<string | null>(() =>
+    tokenUtils.isTokenValid() ? tokenUtils.getToken() : null,
+  );
 
   const [createName, setCreateName] = useState('');
   const [createMode, setCreateMode] = useState<OfficePoolMode>(() =>
@@ -281,11 +226,6 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [createNameTouched, setCreateNameTouched] = useState(false);
   const [createEntryFeeTouched, setCreateEntryFeeTouched] = useState(false);
 
-  const authToken = searchParams.get('auth_token');
-  const telegramAuthQueryData = useMemo(
-    () => getTelegramAuthQueryData(searchParams),
-    [searchParams],
-  );
   const telegramWebAppState = useMemo(
     () => getTelegramWebAppState(searchParams),
     [searchParams],
@@ -299,6 +239,12 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     searchParams.get('scope_external_id') ?? startParamScope.scopeExternalId;
   const deepLinkedPoolId = searchParams.get('pool_id') ?? startParamScope.poolId;
   const isScopedLaunch = !!scopeProvider && !!scopeExternalId;
+  const canonicalSearch = useMemo(
+    () => buildOfficePoolSearch(scopeProvider, scopeExternalId, deepLinkedPoolId ?? undefined),
+    [deepLinkedPoolId, scopeExternalId, scopeProvider],
+  );
+  const currentSearch = searchParams.toString();
+  const currentSearchWithPrefix = currentSearch ? `?${currentSearch}` : '';
 
   const currentUserId = useMemo(() => {
     const token = sessionToken ?? tokenUtils.getToken();
@@ -323,40 +269,20 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       );
 
   useEffect(() => {
-    const telegramWebApp = (globalThis as any).Telegram?.WebApp;
-    telegramWebApp?.ready?.();
-    telegramWebApp?.expand?.();
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
     const resolveOfficePoolSession = async () => {
       try {
         setError(null);
 
-        let nextToken = tokenUtils.getToken();
-        const requiresScopedTelegramAuth = isScopedLaunch;
+        const nextToken =
+          tokenUtils.isTokenValid() ? tokenUtils.getToken() : null;
 
-        if (authToken) {
-          tokenUtils.setToken(authToken, 'TELEGRAM');
-          nextToken = authToken;
-        } else if (telegramAuthQueryData) {
-          const authResponse = await telegramAuthApi.verify(telegramAuthQueryData);
-          tokenUtils.setToken(authResponse.auth_token, 'TELEGRAM');
-          nextToken = authResponse.auth_token;
-        } else if (telegramWebAppState.initData) {
-          nextToken = await verifyTelegramMiniAppOnce(telegramWebAppState.initData);
-          tokenUtils.setToken(nextToken, 'TELEGRAM');
-        } else if (requiresScopedTelegramAuth) {
+        if (!nextToken && isScopedLaunch) {
           tokenUtils.removeToken();
           throw new Error(
             'Missing Telegram Mini App session. Re-open Office Pool from Telegram.',
           );
-        } else if (!tokenUtils.isTokenValid()) {
-          throw new Error('Missing authentication token');
-        } else {
-          nextToken = tokenUtils.getToken();
         }
 
         if (!nextToken) {
@@ -366,17 +292,12 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         if (cancelled) return;
 
         setSessionToken((current) => (current === nextToken ? current : nextToken));
-        setAuthReady(true);
 
-        if (authToken || telegramAuthQueryData || telegramWebAppState.initData) {
+        if (currentSearchWithPrefix !== canonicalSearch) {
           navigate(
             {
               pathname: '/office-pool',
-              search: buildOfficePoolSearch(
-                scopeProvider,
-                scopeExternalId,
-                deepLinkedPoolId ?? undefined,
-              ),
+              search: canonicalSearch,
             },
             { replace: true },
           );
@@ -386,7 +307,6 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         console.error('Failed to load office pools:', err);
         setError(err instanceof Error ? err.message : 'Failed to load office pools');
         setSessionToken(null);
-        setAuthReady(true);
         setIsLoading(false);
       }
     };
@@ -397,18 +317,14 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       cancelled = true;
     };
   }, [
-    authToken,
-    deepLinkedPoolId,
+    canonicalSearch,
+    currentSearchWithPrefix,
     isScopedLaunch,
     navigate,
-    scopeExternalId,
-    scopeProvider,
-    telegramAuthQueryData,
-    telegramWebAppState.initData,
   ]);
 
   useEffect(() => {
-    if (!authReady || !sessionToken) {
+    if (!sessionToken) {
       return;
     }
 
@@ -446,18 +362,18 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     return () => {
       cancelled = true;
     };
-  }, [authReady, isScopedLaunch, scopeExternalId, scopeProvider, sessionToken]);
+  }, [isScopedLaunch, scopeExternalId, scopeProvider, sessionToken]);
 
   useEffect(() => {
-    if (!authReady || !sessionToken || !deepLinkedPoolId || activePoolId === deepLinkedPoolId) {
+    if (!sessionToken || !deepLinkedPoolId || activePoolId === deepLinkedPoolId) {
       return;
     }
 
     openPool(deepLinkedPoolId, 'detail');
-  }, [activePoolId, authReady, deepLinkedPoolId, sessionToken]);
+  }, [activePoolId, deepLinkedPoolId, sessionToken]);
 
   useEffect(() => {
-    if (!authReady || !sessionToken || !activePoolId) return;
+    if (!sessionToken || !activePoolId) return;
 
     const loadPoolContext = async () => {
       try {
@@ -480,7 +396,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     };
 
     void loadPoolContext();
-  }, [activePoolId, authReady, poolReloadToken, sessionToken]);
+  }, [activePoolId, poolReloadToken, sessionToken]);
 
   useEffect(() => {
     if (screen !== 'create') {

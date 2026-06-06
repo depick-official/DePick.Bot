@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import { predictionRecordApi } from '../services/api';
 import { PredictionRecord } from '../types/PredictionRecord';
 import { formatNumber } from '../utils/math';
 import { tokenUtils } from '../utils/token';
 import '../styles/pages.scss';
 
+interface DecodedToken {
+  id?: string;
+  sub?: string;
+  userId?: string;
+}
+
 export default function ClaimPage() {
-  const [searchParams] = useSearchParams();
   const [claimableRecords, setClaimableRecords] = useState<PredictionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<string | null>(null);
 
   useEffect(() => {
-    const authToken = searchParams.get('auth_token');
+    const authToken = tokenUtils.getToken();
 
     if (!authToken) {
       setError('Missing authentication token');
@@ -22,12 +27,12 @@ export default function ClaimPage() {
       return;
     }
 
-    // Store JWT token and extract userId
-    tokenUtils.setToken(authToken, 'TELEGRAM');
-
     try {
-      const payload = JSON.parse(atob(authToken.split('.')[1]));
+      const payload = jwtDecode<DecodedToken>(authToken);
       const userId = payload.userId || payload.sub || payload.id;
+      if (!userId) {
+        throw new Error('Missing user id in token');
+      }
 
       // Fetch claimable records
       const fetchClaimable = async () => {
@@ -49,7 +54,7 @@ export default function ClaimPage() {
       setError('Invalid authentication token');
       setIsLoading(false);
     }
-  }, [searchParams]);
+  }, []);
 
   const handleClaim = async (recordId: string) => {
     try {

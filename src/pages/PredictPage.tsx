@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { predictionApi } from '../services/api';
 import { Prediction } from '../types/Prediction';
 import { calculatePredictRatio, formatNumber } from '../utils/math';
-import { tokenUtils } from '../utils/token';
 import PredictionModal from '../components/PredictionModal';
 import '../styles/pages.scss';
 
 export default function PredictPage() {
-  const [searchParams] = useSearchParams();
   const { matchId } = useParams<{ matchId?: string }>();
   const navigate = useNavigate();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -18,17 +16,6 @@ export default function PredictPage() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const authToken = searchParams.get('auth_token');
-
-    if (!authToken) {
-      setError('Missing authentication token');
-      setIsLoading(false);
-      return;
-    }
-
-    // Store JWT token for API calls
-    tokenUtils.setToken(authToken, 'TELEGRAM');
-
     // Fetch predictions or specific match
     const fetchData = async () => {
       try {
@@ -54,7 +41,7 @@ export default function PredictPage() {
     };
 
     fetchData();
-  }, [searchParams, matchId]);
+  }, [matchId]);
 
   const handlePredictClick = (match: Prediction) => {
     setSelectedMatch(match);
@@ -67,8 +54,7 @@ export default function PredictPage() {
 
     // If we're on a specific match page, navigate back to list
     if (matchId) {
-      const authToken = searchParams.get('auth_token');
-      navigate(`/predict?auth_token=${authToken}`);
+      navigate('/predict');
     }
   };
 

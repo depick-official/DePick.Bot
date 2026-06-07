@@ -97,6 +97,9 @@ export interface DepositTokenSpec {
   address: string;
   symbol: string;
   decimals: number;
+  // BE-resolved authorization method (from /deposits/config). PERMIT = gasless
+  // signature; FALLBACK_APPROVE = user sends an on-chain approve() and pays native gas.
+  gaslessMethod: 'PERMIT' | 'FALLBACK_APPROVE';
 }
 
 export interface DepositChainSpec {

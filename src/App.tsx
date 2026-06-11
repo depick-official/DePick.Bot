@@ -3,7 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
-import { bootstrapAuth } from './services/auth-bootstrap';
+import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
 
 type AuthState =
   | { status: 'bootstrapping' }
@@ -19,17 +19,34 @@ function App() {
     const tg = (window as any).Telegram?.WebApp;
     tg?.ready();
     tg?.expand();
+    let cancelled = false;
 
     bootstrapAuth()
-      .then(() => setAuth({ status: 'ready' }))
+      .then(() => {
+        if (!cancelled) {
+          setAuth({ status: 'ready' });
+        }
+      })
       .catch((err) => {
+        if (cancelled) {
+          return;
+        }
         console.error('[auth-bootstrap]', err);
+        const launchProvider = detectBootstrapProvider();
         const message =
           err?.response?.status === 404
-            ? 'Your Telegram account is not registered with DePick yet — please /start the bot first.'
-            : 'Could not authenticate. Please open this from Telegram.';
+            ? launchProvider === 'MESSENGER'
+              ? 'Could not open this Messenger session. Please reopen the Mini App from Messenger.'
+              : 'Your Telegram account is not registered with DePick yet — please /start the bot first.'
+            : launchProvider === 'MESSENGER'
+              ? 'Could not authenticate. Please reopen this from Messenger.'
+              : 'Could not authenticate. Please open this from Telegram.';
         setAuth({ status: 'error', message });
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (auth.status === 'bootstrapping') {

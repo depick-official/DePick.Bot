@@ -15,6 +15,7 @@
  */
 
 import axios from 'axios';
+import { LoginProvider } from '../types/User';
 import { tokenUtils } from '../utils/token';
 
 interface WebappAuthResponse {
@@ -22,31 +23,98 @@ interface WebappAuthResponse {
   expiresAt: number;
 }
 
+export type MiniAppAuthProvider = Extract<LoginProvider, 'TELEGRAM' | 'MESSENGER'>;
+
+let bootstrapPromise: Promise<string> | null = null;
+
+function cleanupLaunchParams() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('exchange');
+  url.searchParams.delete('auth_token');
+  url.searchParams.delete('auth_success');
+  url.searchParams.delete('provider');
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, document.title, next);
+}
+
+export function detectBootstrapProvider(): MiniAppAuthProvider | null {
+  const tg = (window as any).Telegram?.WebApp;
+  if ((tg?.initData as string | undefined) ?? '') {
+    return 'TELEGRAM';
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('provider')?.toUpperCase() === 'MESSENGER') {
+    return 'MESSENGER';
+  }
+
+  const { loginProvider } = tokenUtils.getTokenData();
+  return loginProvider === 'MESSENGER' ? 'MESSENGER' : null;
+}
+
 /**
  * Resolves with the freshly-issued JWT (also written to localStorage).
  * Rejects when initData is missing, forged, stale, or when no DePick user
  * exists for the Telegram id (user has not run /start).
  */
-export async function bootstrapAuth(): Promise<string> {
+async function bootstrapAuthOnce(): Promise<string> {
+  const baseURL = import.meta.env.VITE_API_URL || '';
   const tg = (window as any).Telegram?.WebApp;
   const initData = (tg?.initData as string | undefined) ?? '';
-  if (!initData) {
-    throw new Error('Missing Telegram WebApp initData — open this Mini App from Telegram');
+  if (initData) {
+    const response = await axios.post<WebappAuthResponse>(
+      `${baseURL}/auth/telegram/webapp`,
+      { initData },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        timeout: 15000,
+      },
+    );
+
+    tokenUtils.setToken(response.data.token, 'TELEGRAM');
+    return response.data.token;
   }
 
-  const baseURL = import.meta.env.VITE_API_URL || '';
-  const response = await axios.post<WebappAuthResponse>(
-    `${baseURL}/auth/telegram/webapp`,
-    { initData },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true',
-      },
-      timeout: 15000,
-    },
-  );
+  const params = new URLSearchParams(window.location.search);
+  const provider = params.get('provider')?.toUpperCase();
+  const exchangeToken = params.get('exchange');
 
-  tokenUtils.setToken(response.data.token, 'TELEGRAM');
-  return response.data.token;
+  if (provider === 'MESSENGER' && exchangeToken) {
+    const response = await axios.post<WebappAuthResponse>(
+      `${baseURL}/messenger/exchange`,
+      { exchangeToken },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        timeout: 15000,
+      },
+    );
+
+    tokenUtils.setToken(response.data.token, 'MESSENGER');
+    cleanupLaunchParams();
+    return response.data.token;
+  }
+
+  const { token, loginProvider } = tokenUtils.getTokenData();
+  if (loginProvider === 'MESSENGER' && token && tokenUtils.isTokenValid()) {
+    return token;
+  }
+
+  throw new Error('Missing Messenger exchange token or Telegram WebApp initData');
+}
+
+export function bootstrapAuth(): Promise<string> {
+  if (bootstrapPromise) {
+    return bootstrapPromise;
+  }
+
+  bootstrapPromise = bootstrapAuthOnce().finally(() => {
+    bootstrapPromise = null;
+  });
+  return bootstrapPromise;
 }

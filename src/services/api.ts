@@ -45,15 +45,25 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
     const status = error.response?.status;
+    const { loginProvider } = tokenUtils.getTokenData();
 
     // Only refresh-and-retry on 401, and only once per request. The bootstrap
     // endpoint itself must never recurse here.
-    const isBootstrap = typeof original?.url === 'string' && original.url.includes('/auth/telegram/webapp');
+    const isBootstrap =
+      typeof original?.url === 'string' &&
+      (original.url.includes('/auth/telegram/webapp') ||
+        original.url.includes('/messenger/exchange'));
     if (status !== 401 || !original || original._retried || isBootstrap) {
       if (status === 401) {
         tokenUtils.removeToken();
         console.error('Authentication failed (no retry available)');
       }
+      return Promise.reject(error);
+    }
+
+    if (loginProvider !== 'TELEGRAM') {
+      tokenUtils.removeToken();
+      console.error(`Authentication failed (no refresh available for ${loginProvider || 'unknown'} provider)`);
       return Promise.reject(error);
     }
     original._retried = true;

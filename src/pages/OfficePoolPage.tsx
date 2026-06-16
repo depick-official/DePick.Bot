@@ -155,12 +155,36 @@ function getPickLabel(option: OfficePoolPickOption) {
       return 'Draw';
     case 'AWAY':
       return 'Away';
+    case 'SIDE_A':
+      return 'Side A';
+    case 'SIDE_B':
+      return 'Side B';
   }
+}
+
+function getMatchPickOptions(
+  mode: OfficePoolMode,
+  match: OfficePoolPredictionSummary,
+): Array<{ option: OfficePoolPickOption; label: string }> {
+  if (mode === 'WORLD_CUP_KNOCKOUT_STAGE') {
+    return [
+      { option: 'SIDE_A', label: match.homeTeamName },
+      { option: 'SIDE_B', label: match.awayTeamName },
+    ];
+  }
+
+  return [
+    { option: 'HOME', label: 'Home' },
+    { option: 'DRAW', label: 'Draw' },
+    { option: 'AWAY', label: 'Away' },
+  ];
 }
 
 function pickFromResult(result: string): OfficePoolPickOption | null {
   if (result === 'HOME') return 'HOME';
   if (result === 'AWAY') return 'AWAY';
+  if (result === 'SIDE_A') return 'SIDE_A';
+  if (result === 'SIDE_B') return 'SIDE_B';
   if (result === 'TIE') return 'DRAW';
   return null;
 }
@@ -565,10 +589,10 @@ function getSettlementCopy(status: OfficePoolSettlementStatus, totalPrizePool: n
 
 function getScoringCopy(mode: OfficePoolMode) {
   if (mode === 'WORLD_CUP_GROUP_STAGE') {
-    return 'Scoring: every correct match pick is 1 point. Each correct Champion Pick for 1st and 2nd in a group is 2 points.';
+    return 'Scoring: every correct group match result is 2 points. Positional qualifier picks score 4 / 3 / 2 for 1st / 2nd / 3rd.';
   }
 
-  return 'Scoring: Round of 32 wins are 2 points, Round of 16 wins are 2 points, Quarter-finals are 3 points, Semi-finals are 5 points, the Final is 10 points, the third-place match is 5 points, and Champion Picks are worth 15 / 10 / 5 for 1st / 2nd / 3rd.';
+  return 'Scoring: Round of 32 winners are 2 points, Round of 16 winners are 4 points, Quarter-finals are 8 points, Semi-finals are 16 points, the Final is 32 points, the third-place playoff is 24 points, and podium picks score 32 / 16 / 8 for 1st / 2nd / 3rd.';
 }
 
 function CreatorDashboard({
@@ -1218,7 +1242,11 @@ export default function OfficePoolPage() {
                   <div className="office-pool-panel-head">
                     <div>
                       <h2>Picks</h2>
-                      <p className="office-pool-copy">Choose Home, Draw, or Away for each match window.</p>
+                      <p className="office-pool-copy">
+                        {activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+                          ? 'Choose the team that advances from each knockout match.'
+                          : 'Choose Home, Draw, or Away for each match window.'}
+                      </p>
                     </div>
                     <button className="predict-button office-pool-inline-btn" onClick={handleSavePicks} disabled={isSaving || !activePool.isMember}>
                       {isSaving ? 'Saving...' : 'Save Picks'}
@@ -1264,6 +1292,7 @@ export default function OfficePoolPage() {
                       {activeMatchWindow.matches.map((match) => {
                         const resultPick = pickFromResult(match.result);
                         const myPick = picks[match.id];
+                        const pickOptions = getMatchPickOptions(activePool.mode, match);
                         return (
                           <div key={match.id} className={`office-pool-match-card ${match.isLocked ? 'office-pool-match-locked' : ''}`}>
                             <div className="office-pool-match-head">
@@ -1282,14 +1311,14 @@ export default function OfficePoolPage() {
                               </div>
                             </div>
                             <div className="office-pool-pick-row">
-                              {(['HOME', 'DRAW', 'AWAY'] as OfficePoolPickOption[]).map((option) => (
+                              {pickOptions.map(({ option, label }) => (
                                 <button
                                   key={option}
                                   className={`office-pool-pick-btn ${myPick === option ? 'office-pool-pick-selected' : ''} ${resultPick === option && match.isLocked ? 'office-pool-pick-result' : ''}`}
                                   onClick={() => handlePickChange(match.id, option)}
                                   disabled={match.isLocked}
                                 >
-                                  {getPickLabel(option)}
+                                  {label || getPickLabel(option)}
                                 </button>
                               ))}
                             </div>

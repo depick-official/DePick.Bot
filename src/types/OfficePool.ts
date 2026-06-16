@@ -1,6 +1,6 @@
 export type OfficePoolStatus = 'OPEN' | 'LIVE' | 'LOCKED' | 'SETTLED' | 'ARCHIVED';
 export type OfficePoolAccessPolicy = 'INVITE_LOCK' | 'OPEN';
-export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY';
+export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY' | 'SIDE_A' | 'SIDE_B';
 export type OfficePoolMode = 'WORLD_CUP_GROUP_STAGE' | 'WORLD_CUP_KNOCKOUT_STAGE';
 export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
 export type OfficePoolSettlementStatus = 'NOT_READY' | 'READY' | 'NO_PAID_ENTRIES' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
@@ -84,7 +84,7 @@ export interface OfficePoolPredictionSummary {
   roundLabel?: string | null;
   tournament: string;
   status: string;
-  result: 'HOME' | 'AWAY' | 'TIE' | 'PENDING' | 'ERROR';
+  result: 'HOME' | 'AWAY' | 'SIDE_A' | 'SIDE_B' | 'TIE' | 'PENDING' | 'ERROR';
   homeTeamId: string;
   homeTeamName: string;
   homeTeamLogo: string;

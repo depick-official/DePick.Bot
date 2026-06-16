@@ -98,7 +98,7 @@ const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
     title: 'World Cup Knockout Stage',
     badge: 'Locked',
     description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and final podium selections.',
-    championPickLabel: 'Players choose Champion Picks for 1st, 2nd, and 3rd before joining. Those Champion Picks lock immediately after join.',
+    championPickLabel: 'Players choose Podium picks for 1st, 2nd, and 3rd before joining. Those Podium picks lock when the knockout pool opens.',
     startsAt: '2026-06-29',
     endsAt: '2026-07-19',
     isLocked: true,
@@ -448,8 +448,28 @@ function buildJoinSidePickPayload(
   }));
 }
 
-function getLockedSidePickTitle() {
-  return 'Champion Picks';
+function getLockedSidePickTitle(mode: OfficePoolMode) {
+  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Podium Picks' : 'Champion Picks';
+}
+
+function getJoinPickCopy(mode: OfficePoolMode) {
+  return mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+    ? 'Choose your Podium picks for final 1st, 2nd, and 3rd place before you join. These Podium picks lock when the knockout pool opens.'
+    : 'Choose your Champion Picks for the required qualifying places in every group before you join. These Champion Picks lock immediately after join.';
+}
+
+function getJoinPickProgressLabel(mode: OfficePoolMode) {
+  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Podium picks selected' : 'Champion Picks selected';
+}
+
+function getLockedSidePickCopy(mode: OfficePoolMode) {
+  return mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+    ? 'These Podium picks lock when the knockout pool opens. Match picks stay editable until each match locks.'
+    : 'These Champion Picks are locked after you join the pool. Normal match picks stay editable until each match locks.';
+}
+
+function getOfficialSidePickTitle(mode: OfficePoolMode) {
+  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Official settled Podium picks:' : 'Official settled Champion Picks:';
 }
 
 function getLockedSidePickLines(
@@ -854,7 +874,7 @@ export default function OfficePoolPage() {
             <div>
               <div className="office-pool-eyebrow">DePick - Office Pools</div>
               <h2>{isScopedLaunch ? 'Play your pool with your friends' : 'Your joined office pools'}</h2>
-              <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with locked Champion Picks.' : 'Open a pool you already joined from Telegram group chat.'}</p>
+              <p>{isScopedLaunch ? 'Choose the World Cup stage, open the pool for your group, then each player joins with locked tournament picks.' : 'Open a pool you already joined from Telegram group chat.'}</p>
             </div>
             {isScopedLaunch && canCreateScopedPool ? (
               <button className="predict-button office-pool-cta" onClick={() => setScreen('create')}>
@@ -1053,9 +1073,7 @@ export default function OfficePoolPage() {
                       <section className="office-pool-panel">
                         <h2>Join Pool</h2>
                         <p className="office-pool-copy">
-                          {activePool.mode === 'WORLD_CUP_GROUP_STAGE'
-                            ? 'Choose your Champion Picks for the required qualifying places in every group before you join. These Champion Picks lock immediately after join.'
-                            : 'Choose your Champion Picks for final 1st, 2nd, and 3rd place before you join. These Champion Picks lock immediately after join.'}
+                          {getJoinPickCopy(activePool.mode)}
                         </p>
                         {isJoinTemporarilyLocked ? (
                           <p className="office-pool-copy">
@@ -1085,7 +1103,7 @@ export default function OfficePoolPage() {
                           {isSaving ? 'Joining...' : 'Join Pool'}
                         </button>
                         <p className="office-pool-copy">
-                          Champion Picks selected: {joinSidePickCount}/{requiredJoinSidePickCount}
+                          {getJoinPickProgressLabel(activePool.mode)}: {joinSidePickCount}/{requiredJoinSidePickCount}
                         </p>
                       </section>
 
@@ -1111,7 +1129,7 @@ export default function OfficePoolPage() {
                         <h2>Your Entry</h2>
                         <div className="office-pool-entry-card">
                           <div>
-                            <span className="office-pool-copy-label">{getLockedSidePickTitle()}</span>
+                            <span className="office-pool-copy-label">{getLockedSidePickTitle(activePool.mode)}</span>
                             <strong>{lockedSidePickLines.length > 0 ? `${lockedSidePickLines.length} saved` : 'Saved on join'}</strong>
                           </div>
                           <div>
@@ -1129,7 +1147,7 @@ export default function OfficePoolPage() {
                           </div>
                         ) : null}
                         <p className="office-pool-copy">
-                          These Champion Picks are locked after you join the pool. Normal match picks stay editable until each match locks.
+                          {getLockedSidePickCopy(activePool.mode)}
                         </p>
                         {!activePool.telegramGroupInviteUrl ? (
                           <p className="office-pool-copy">
@@ -1139,7 +1157,7 @@ export default function OfficePoolPage() {
                         {sidePickComparisonLines.length > 0 ? (
                           <>
                             <p className="office-pool-copy">
-                              Official settled Champion Picks:
+                              {getOfficialSidePickTitle(activePool.mode)}
                             </p>
                             <div className="office-pool-member-list">
                               {sidePickComparisonLines.map((line) => (
@@ -1227,7 +1245,7 @@ export default function OfficePoolPage() {
                           {members.map((member) => (
                             <div key={member.userId} className="office-pool-member-row">
                               <strong>{member.displayNameSnapshot}</strong>
-                              <span>{activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? (member.championPickTeamName ?? 'Champion Picks saved') : 'Champion Picks locked'}</span>
+                              <span>{activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? (member.championPickTeamName ?? 'Podium picks saved') : 'Champion Picks locked'}</span>
                             </div>
                           ))}
                         </div>

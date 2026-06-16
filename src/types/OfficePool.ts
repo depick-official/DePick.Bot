@@ -1,7 +1,7 @@
 export type OfficePoolStatus = 'OPEN' | 'LIVE' | 'LOCKED' | 'SETTLED' | 'ARCHIVED';
 export type OfficePoolAccessPolicy = 'INVITE_LOCK' | 'OPEN';
 export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY' | 'SIDE_A' | 'SIDE_B';
-export type OfficePoolMode = 'WORLD_CUP_GROUP_STAGE' | 'WORLD_CUP_KNOCKOUT_STAGE';
+export type OfficePoolMode = 'GROUP_STAGE' | 'KNOCKOUT_STAGE';
 export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
 export type OfficePoolSettlementStatus = 'NOT_READY' | 'READY' | 'NO_PAID_ENTRIES' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
 

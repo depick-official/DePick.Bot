@@ -58,7 +58,7 @@ function getDefaultCreateMode(
         new Date(startOfDayIso(worldCupModeConfigMap[right].startsAt)).getTime(),
     );
 
-  return eligibleModes[0] ?? 'WORLD_CUP_GROUP_STAGE';
+  return eligibleModes[0] ?? 'GROUP_STAGE';
 }
 
 function buildOfficePoolSearch(
@@ -262,10 +262,10 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   );
 
   const isJoinTemporarilyLocked =
-    activePool?.mode === 'WORLD_CUP_KNOCKOUT_STAGE' &&
+    activePool?.mode === 'KNOCKOUT_STAGE' &&
     new Date() <
       new Date(
-        startOfDayIso(worldCupModeConfigMap.WORLD_CUP_KNOCKOUT_STAGE.startsAt),
+        startOfDayIso(worldCupModeConfigMap.KNOCKOUT_STAGE.startsAt),
       );
 
   useEffect(() => {

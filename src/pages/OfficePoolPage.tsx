@@ -85,7 +85,7 @@ type GroupQualifierSlotKey = typeof GROUP_QUALIFIER_SLOT_KEYS[number];
 
 const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
   {
-    mode: 'WORLD_CUP_GROUP_STAGE',
+    mode: 'GROUP_STAGE',
     title: 'World Cup Group Stage',
     badge: 'Incoming',
     description: 'Play the 2026 World Cup opening phase with group-stage match picks and the required qualifying places for every group.',
@@ -94,7 +94,7 @@ const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
     endsAt: '2026-06-27',
   },
   {
-    mode: 'WORLD_CUP_KNOCKOUT_STAGE',
+    mode: 'KNOCKOUT_STAGE',
     title: 'World Cup Knockout Stage',
     badge: 'Locked',
     description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and final podium selections.',
@@ -166,7 +166,7 @@ function getMatchPickOptions(
   mode: OfficePoolMode,
   match: OfficePoolPredictionSummary,
 ): Array<{ option: OfficePoolPickOption; label: string }> {
-  if (mode === 'WORLD_CUP_KNOCKOUT_STAGE') {
+  if (mode === 'KNOCKOUT_STAGE') {
     return [
       { option: 'SIDE_A', label: match.homeTeamName },
       { option: 'SIDE_B', label: match.awayTeamName },
@@ -398,7 +398,7 @@ function buildKnockoutMatchWindows(
 }
 
 function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[], joinSidePickMap: Record<string, string>) {
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return groupCards.reduce(
       (count, groupCard) =>
         count +
@@ -416,7 +416,7 @@ function getJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCa
 }
 
 function getRequiredJoinSidePickCount(mode: OfficePoolMode, groupCards: GroupQualifierCard[]) {
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return groupCards.reduce(
       (count, groupCard) => count + groupCard.qualifierSlotKeys.length,
       0,
@@ -431,7 +431,7 @@ function buildJoinSidePickPayload(
   groupCards: GroupQualifierCard[],
   joinSidePickMap: Record<string, string>,
 ) {
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return groupCards.flatMap((groupCard) =>
       groupCard.qualifierSlotKeys.map((slotKey) => ({
         type: 'GROUP_QUALIFIER' as const,
@@ -449,27 +449,27 @@ function buildJoinSidePickPayload(
 }
 
 function getLockedSidePickTitle(mode: OfficePoolMode) {
-  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Podium Picks' : 'Champion Picks';
+  return mode === 'KNOCKOUT_STAGE' ? 'Podium Picks' : 'Champion Picks';
 }
 
 function getJoinPickCopy(mode: OfficePoolMode) {
-  return mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+  return mode === 'KNOCKOUT_STAGE'
     ? 'Choose your Podium picks for final 1st, 2nd, and 3rd place before you join. These Podium picks lock when the knockout pool opens.'
     : 'Choose your Champion Picks for the required qualifying places in every group before you join. These Champion Picks lock immediately after join.';
 }
 
 function getJoinPickProgressLabel(mode: OfficePoolMode) {
-  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Podium picks selected' : 'Champion Picks selected';
+  return mode === 'KNOCKOUT_STAGE' ? 'Podium picks selected' : 'Champion Picks selected';
 }
 
 function getLockedSidePickCopy(mode: OfficePoolMode) {
-  return mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+  return mode === 'KNOCKOUT_STAGE'
     ? 'These Podium picks lock when the knockout pool opens. Match picks stay editable until each match locks.'
     : 'These Champion Picks are locked after you join the pool. Normal match picks stay editable until each match locks.';
 }
 
 function getOfficialSidePickTitle(mode: OfficePoolMode) {
-  return mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? 'Official settled Podium picks:' : 'Official settled Champion Picks:';
+  return mode === 'KNOCKOUT_STAGE' ? 'Official settled Podium picks:' : 'Official settled Champion Picks:';
 }
 
 function getLockedSidePickLines(
@@ -477,7 +477,7 @@ function getLockedSidePickLines(
   sidePicks: OfficePoolSidePickSummary[],
   groupCards: GroupQualifierCard[],
 ) {
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return groupCards
       .map((groupCard) => {
         const slotLines = groupCard.qualifierSlotKeys
@@ -523,7 +523,7 @@ function getSidePickComparisonLines(
     return [];
   }
 
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return groupCards
       .map((groupCard) => {
         const comparisons = groupCard.qualifierSlotKeys
@@ -608,7 +608,7 @@ function getSettlementCopy(status: OfficePoolSettlementStatus, totalPrizePool: n
 }
 
 function getScoringCopy(mode: OfficePoolMode) {
-  if (mode === 'WORLD_CUP_GROUP_STAGE') {
+  if (mode === 'GROUP_STAGE') {
     return 'Scoring: every correct group match result is 2 points. Positional qualifier picks score 4 / 3 / 2 for 1st / 2nd / 3rd.';
   }
 
@@ -698,7 +698,7 @@ export default function OfficePoolPage() {
 
   const availableTeams = useMemo(() => buildTeamOptions(predictions), [predictions]);
   const groupQualifierCards = useMemo(
-    () => (activePool?.mode === 'WORLD_CUP_GROUP_STAGE' ? buildGroupQualifierCards(predictions) : []),
+    () => (activePool?.mode === 'GROUP_STAGE' ? buildGroupQualifierCards(predictions) : []),
     [activePool?.mode, predictions],
   );
   const activeGroupCard = groupQualifierCards[activeQualifierGroupIndex] ?? null;
@@ -711,11 +711,11 @@ export default function OfficePoolPage() {
     [activePool, groupQualifierCards],
   );
   const matchPickWindows = useMemo(() => {
-    if (activePool?.mode === 'WORLD_CUP_GROUP_STAGE') {
+    if (activePool?.mode === 'GROUP_STAGE') {
       return buildGroupMatchWindows(predictions, groupQualifierCards);
     }
 
-    if (activePool?.mode === 'WORLD_CUP_KNOCKOUT_STAGE') {
+    if (activePool?.mode === 'KNOCKOUT_STAGE') {
       return buildKnockoutMatchWindows(predictions);
     }
 
@@ -1007,7 +1007,7 @@ export default function OfficePoolPage() {
               isPoolLoading
                 ? 'Fetching the latest pool data'
                 : screen === 'detail'
-                  ? getModeLabel(activePool?.mode ?? 'WORLD_CUP_GROUP_STAGE')
+                  ? getModeLabel(activePool?.mode ?? 'GROUP_STAGE')
                   : activePool?.name
             }
             backLabel={screen === 'detail' ? 'Dashboard' : 'Pool'}
@@ -1080,7 +1080,7 @@ export default function OfficePoolPage() {
                             World Cup Knockout Stage is locked for now. It will start on Jun 29 UTC.
                           </p>
                         ) : null}
-                        {activePool.mode === 'WORLD_CUP_GROUP_STAGE' ? (
+                        {activePool.mode === 'GROUP_STAGE' ? (
                           <GroupQualifierPicker
                             activeGroupCard={activeGroupCard}
                             activeIndex={activeQualifierGroupIndex}
@@ -1245,7 +1245,7 @@ export default function OfficePoolPage() {
                           {members.map((member) => (
                             <div key={member.userId} className="office-pool-member-row">
                               <strong>{member.displayNameSnapshot}</strong>
-                              <span>{activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE' ? (member.championPickTeamName ?? 'Podium picks saved') : 'Champion Picks locked'}</span>
+                              <span>{activePool.mode === 'KNOCKOUT_STAGE' ? (member.championPickTeamName ?? 'Podium picks saved') : 'Champion Picks locked'}</span>
                             </div>
                           ))}
                         </div>
@@ -1261,7 +1261,7 @@ export default function OfficePoolPage() {
                     <div>
                       <h2>Picks</h2>
                       <p className="office-pool-copy">
-                        {activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+                        {activePool.mode === 'KNOCKOUT_STAGE'
                           ? 'Choose the team that advances from each knockout match.'
                           : 'Choose Home, Draw, or Away for each match window.'}
                       </p>
@@ -1282,9 +1282,9 @@ export default function OfficePoolPage() {
                         <div>
                           <h2>{activeMatchWindow.label}</h2>
                           <p className="office-pool-copy">
-                            {activePool.mode === 'WORLD_CUP_GROUP_STAGE'
+                            {activePool.mode === 'GROUP_STAGE'
                               ? 'Group'
-                              : activePool.mode === 'WORLD_CUP_KNOCKOUT_STAGE'
+                              : activePool.mode === 'KNOCKOUT_STAGE'
                                 ? 'Round'
                                 : 'Match window'} {activeMatchWindowIndex + 1}/{matchPickWindows.length} · {activeMatchWindow.matchCount} matches
                           </p>

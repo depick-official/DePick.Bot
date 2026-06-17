@@ -37,6 +37,13 @@ export interface OfficePoolSummary {
   entrantCount?: number | null;
   isMember: boolean;
   isCreator: boolean;
+  onChain?: {
+    address: string | null;
+    poolKey: string | null;
+    txHash: string | null;
+    status: 'PENDING' | 'CONFIRMED' | 'FAILED';
+  };
+  canonicalReadiness?: 'READY' | 'PENDING_E14';
   createTime: string;
   updateTime: string;
 }

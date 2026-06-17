@@ -63,10 +63,6 @@ function isNotYetCanonicalError(err: unknown) {
   );
 }
 
-function isMissingJoinContextRoute(err: unknown) {
-  return (err as any)?.response?.status === 404;
-}
-
 function buildPendingJoinContext(pool: OfficePoolSummary): OfficePoolJoinContext | null {
   if (pool.mode !== 'KNOCKOUT_STAGE') {
     return null;
@@ -95,11 +91,15 @@ async function fetchJoinContext(pool: OfficePoolSummary) {
   try {
     return await officePoolApi.getJoinContext(pool.id);
   } catch (err) {
-    if (isNotYetCanonicalError(err) || isMissingJoinContextRoute(err)) {
+    if (isNotYetCanonicalError(err)) {
       return buildPendingJoinContext(pool);
     }
     throw err;
   }
+}
+
+function isCanonicalPool(pool: OfficePoolSummary) {
+  return pool.canonicalReadiness === 'READY' || !!pool.onChain?.poolKey;
 }
 
 function getDefaultCreateMode(
@@ -211,6 +211,19 @@ async function fetchHomePools(scope: {
 
 async function fetchPoolContext(poolId: string) {
   const pool = await officePoolApi.getById(poolId);
+
+  if (isCanonicalPool(pool)) {
+    const joinContext = !pool.isMember ? await fetchJoinContext(pool) : null;
+    return {
+      pool,
+      joinContext,
+      predictions: [] as OfficePoolPredictionSummary[],
+      members: [] as OfficePoolMemberSummary[],
+      leaderboard: null as OfficePoolLeaderboardResponse | null,
+      picks: {} as Record<string, OfficePoolPickOption>,
+      sidePicks: [] as OfficePoolSidePickSummary[],
+    };
+  }
 
   if (pool.isMember) {
     const [predictions, members, leaderboard, picks, sidePicks] = await Promise.all([

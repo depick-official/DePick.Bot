@@ -1137,7 +1137,7 @@ export default function OfficePoolPage() {
                         <div className="office-pool-eyebrow">{getModeLabel(activePool.mode)}</div>
                         <h2>{getPoolTitle(activePool)}</h2>
                       </div>
-                      {activePool.isMember && (
+                      {activePool.isMember && predictions.length > 0 && (
                         <button className="predict-button office-pool-inline-btn" onClick={() => setScreen('picks')}>
                           Open Picks
                         </button>
@@ -1255,6 +1255,9 @@ export default function OfficePoolPage() {
                         <p className="office-pool-copy">
                           {getLockedSidePickCopy(activePool.mode)}
                         </p>
+                        <p className="office-pool-copy">
+                          Match picks and leaderboard will appear here as the canonical pool surfaces come online.
+                        </p>
                         {!activePool.telegramGroupInviteUrl ? (
                           <p className="office-pool-copy">
                             Share your Telegram group link with friends so they can join the group, then open <strong>/officepool</strong> to play this pool.
@@ -1276,6 +1279,7 @@ export default function OfficePoolPage() {
                         ) : null}
                       </section>
 
+                      {leaderboard ? (
                       <section className="office-pool-panel">
                         <div className="office-pool-panel-head">
                           <h2>Prize Pool</h2>
@@ -1308,7 +1312,9 @@ export default function OfficePoolPage() {
                           {getScoringCopy(activePool.mode)}
                         </p>
                       </section>
+                      ) : null}
 
+                      {leaderboard ? (
                       <section className="office-pool-panel">
                         <div className="office-pool-panel-head">
                           <h2>Leaderboard</h2>
@@ -1341,7 +1347,9 @@ export default function OfficePoolPage() {
                           })}
                         </div>
                       </section>
+                      ) : null}
 
+                      {members.length > 0 ? (
                       <section className="office-pool-panel">
                         <div className="office-pool-panel-head">
                           <h2>Members</h2>
@@ -1356,6 +1364,7 @@ export default function OfficePoolPage() {
                           ))}
                         </div>
                       </section>
+                      ) : null}
                     </>
                   )}
                 </>

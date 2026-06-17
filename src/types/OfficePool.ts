@@ -4,6 +4,7 @@ export type OfficePoolPickOption = 'HOME' | 'DRAW' | 'AWAY' | 'SIDE_A' | 'SIDE_B
 export type OfficePoolMode = 'GROUP_STAGE' | 'KNOCKOUT_STAGE';
 export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
 export type OfficePoolSettlementStatus = 'NOT_READY' | 'READY' | 'NO_PAID_ENTRIES' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
+export type OfficePoolPrizeAllocationPreset = 'winner_takes_all' | 'top_4_40_30_20_10';
 
 export interface OfficePoolSummary {
   id: string;
@@ -18,13 +19,22 @@ export interface OfficePoolSummary {
   mode: OfficePoolMode;
   accessPolicy: OfficePoolAccessPolicy;
   tournament: string;
+  season?: string;
   seasonKey?: string;
-  startsAt: string;
-  endsAt: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  tQ?: string | null;
+  joinClosesAt?: string | null;
   scopeProvider?: string | null;
   scopeExternalId?: string | null;
-  entryFee: number;
-  participants: number;
+  entryFee?: number | null;
+  minEntryAmount?: string | null;
+  maxEntryAmount?: string | null;
+  prizeAllocationPreset?: OfficePoolPrizeAllocationPreset;
+  rakeBps?: number;
+  lifecycleStatus?: 'CREATED' | 'OPEN' | 'LOCKED' | 'FINALIZED' | 'VOID';
+  participants?: number | null;
+  entrantCount?: number | null;
   isMember: boolean;
   isCreator: boolean;
   createTime: string;
@@ -36,23 +46,57 @@ export interface OfficePoolScopeAccess {
 }
 
 export interface CreateOfficePoolRequest {
-  name: string;
   mode: OfficePoolMode;
   tournament: string;
-  seasonKey?: string;
-  startsAt: string;
-  endsAt: string;
-  accessPolicy?: OfficePoolAccessPolicy;
+  season: string;
+  minEntryAmount: string;
+  maxEntryAmount: string;
+  prizeAllocationPreset: OfficePoolPrizeAllocationPreset;
   scopeProvider?: string;
   scopeExternalId?: string;
-  entryFee: number;
-  championPickTeamId?: string;
 }
 
 export interface JoinOfficePoolRequest {
-  inviteCode?: string;
-  championPickTeamId?: string;
-  sidePicks?: SetOfficePoolSidePickItem[];
+  entryAmount: string;
+  idempotencyKey: string;
+  structuralPicks:
+    | { kind: 'GROUP'; qualifiers: unknown[] }
+    | {
+        kind: 'KNOCKOUT';
+        podium: {
+          championTeamRef: TeamRef;
+          runnerUpTeamRef: TeamRef;
+          thirdTeamRef: TeamRef;
+        };
+      };
+}
+
+export interface TeamRef {
+  teamIndex: number;
+  displayName: string;
+}
+
+export type OfficePoolJoinReadiness = 'READY' | 'ROSTER_PENDING' | 'JOIN_CLOSED' | 'PAUSED';
+
+export interface OfficePoolPodiumTeam {
+  teamIndex: number;
+  displayName: string;
+  countryCode?: string;
+  crestUrl?: string;
+}
+
+export interface OfficePoolJoinContext {
+  id: string;
+  mode: 'KNOCKOUT_STAGE';
+  lifecycleStatus: 'OPEN' | 'PAUSED' | 'FINALIZED' | 'VOID';
+  minEntryAmount: string;
+  maxEntryAmount: string;
+  prizeAllocationPreset: OfficePoolPrizeAllocationPreset;
+  joinClosesAt: string;
+  locked: boolean;
+  joinReadiness: OfficePoolJoinReadiness;
+  joinReadinessReason?: string;
+  podiumRoster: OfficePoolPodiumTeam[];
 }
 
 export interface OfficePoolMemberSummary {
@@ -126,6 +170,10 @@ export interface OfficePoolLeaderboardResponse {
 }
 
 export interface OfficePoolJoinResponse {
-  pool: OfficePoolSummary;
-  member: OfficePoolMemberSummary;
+  pool?: OfficePoolSummary;
+  member?: OfficePoolMemberSummary;
+  entry?: { entryAmount: string; joinedAt: string };
+  onChain?: { txHash: string | null; status: 'PENDING' | 'CONFIRMED' | 'FAILED' };
+  validation?: { ok: boolean; errors: string[] };
+  canonicalReadiness?: 'READY' | 'PENDING_E15';
 }

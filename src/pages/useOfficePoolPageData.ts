@@ -5,6 +5,8 @@ import { officePoolApi } from '../services/api';
 import { tokenUtils } from '../utils/token';
 import {
   CreateOfficePoolRequest,
+  JoinOfficePoolRequest,
+  OfficePoolJoinContext,
   OfficePoolJoinResponse,
   OfficePoolLeaderboardResponse,
   OfficePoolMemberSummary,
@@ -13,7 +15,6 @@ import {
   OfficePoolPredictionSummary,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
-  SetOfficePoolSidePickItem,
 } from '../types/OfficePool';
 
 interface DecodedToken {
@@ -35,12 +36,70 @@ export const PODIUM_KEYS = ['FIRST', 'SECOND', 'THIRD'] as const;
 export type PodiumKey = typeof PODIUM_KEYS[number];
 type Screen = 'home' | 'create' | 'detail' | 'picks';
 
+const NOT_YET_CANONICAL_MESSAGE = 'Office Pool join is being prepared for this pool.';
+
 function startOfDayIso(value: string) {
   return `${value}T00:00:00.000Z`;
 }
 
 function endOfDayIso(value: string) {
   return `${value}T23:59:59.999Z`;
+}
+
+function pickToRawString(value: number) {
+  return String(Math.trunc(value * 1_000_000));
+}
+
+function getPoolNoticeTitle(pool: OfficePoolSummary) {
+  return pool.name?.trim() || pool.telegramGroupName?.trim() || (pool.mode === 'KNOCKOUT_STAGE' ? 'World Cup Knockout Stage' : 'Office Pool');
+}
+
+function isNotYetCanonicalError(err: unknown) {
+  const message = (err as any)?.response?.data?.message;
+  return (
+    (err as any)?.response?.status === 501 &&
+    typeof message === 'string' &&
+    message.includes('NOT_YET_CANONICAL')
+  );
+}
+
+function isMissingJoinContextRoute(err: unknown) {
+  return (err as any)?.response?.status === 404;
+}
+
+function buildPendingJoinContext(pool: OfficePoolSummary): OfficePoolJoinContext | null {
+  if (pool.mode !== 'KNOCKOUT_STAGE') {
+    return null;
+  }
+
+  return {
+    id: pool.id,
+    mode: 'KNOCKOUT_STAGE',
+    lifecycleStatus: 'OPEN',
+    minEntryAmount: pool.minEntryAmount ?? '0',
+    maxEntryAmount: pool.maxEntryAmount ?? pool.minEntryAmount ?? '0',
+    prizeAllocationPreset: pool.prizeAllocationPreset ?? 'top_4_40_30_20_10',
+    joinClosesAt: pool.joinClosesAt ?? '',
+    locked: false,
+    joinReadiness: 'ROSTER_PENDING',
+    joinReadinessReason: NOT_YET_CANONICAL_MESSAGE,
+    podiumRoster: [],
+  };
+}
+
+async function fetchJoinContext(pool: OfficePoolSummary) {
+  if (pool.mode !== 'KNOCKOUT_STAGE') {
+    return null;
+  }
+
+  try {
+    return await officePoolApi.getJoinContext(pool.id);
+  } catch (err) {
+    if (isNotYetCanonicalError(err) || isMissingJoinContextRoute(err)) {
+      return buildPendingJoinContext(pool);
+    }
+    throw err;
+  }
 }
 
 function getDefaultCreateMode(
@@ -50,7 +109,7 @@ function getDefaultCreateMode(
   const eligibleModes = (Object.keys(worldCupModeConfigMap) as OfficePoolMode[])
     .filter((mode) => {
       const config = worldCupModeConfigMap[mode];
-      return new Date(endOfDayIso(config.endsAt)) >= now;
+      return !config.isLocked && new Date(endOfDayIso(config.endsAt)) >= now;
     })
     .sort(
       (left, right) =>
@@ -169,11 +228,13 @@ async function fetchPoolContext(poolId: string) {
       leaderboard,
       picks,
       sidePicks,
+      joinContext: null as OfficePoolJoinContext | null,
     };
   }
 
-  const [predictions, leaderboard] = await Promise.all([
-    officePoolApi.getPredictions(poolId).catch(() => []),
+  const [joinContext, predictions, leaderboard] = await Promise.all([
+    fetchJoinContext(pool),
+    pool.mode === 'GROUP_STAGE' ? officePoolApi.getPredictions(poolId) : Promise.resolve([]),
     pool.isCreator
       ? officePoolApi.getLeaderboard(poolId).catch(() => null)
       : Promise.resolve(null),
@@ -181,6 +242,7 @@ async function fetchPoolContext(poolId: string) {
 
   return {
     pool,
+    joinContext,
     predictions,
     members: [] as OfficePoolMemberSummary[],
     leaderboard,
@@ -209,6 +271,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [leaderboard, setLeaderboard] = useState<OfficePoolLeaderboardResponse | null>(null);
   const [picks, setPicks] = useState<Record<string, OfficePoolPickOption>>({});
   const [sidePicks, setSidePicks] = useState<OfficePoolSidePickSummary[]>([]);
+  const [joinContext, setJoinContext] = useState<OfficePoolJoinContext | null>(null);
   const [joinSidePickMap, setJoinSidePickMap] = useState<Record<string, string>>({});
   const [activeQualifierGroupIndex, setActiveQualifierGroupIndex] = useState(0);
   const [activePodiumKey, setActivePodiumKey] = useState<PodiumKey>('FIRST');
@@ -262,11 +325,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   );
 
   const isJoinTemporarilyLocked =
-    activePool?.mode === 'KNOCKOUT_STAGE' &&
-    new Date() <
-      new Date(
-        startOfDayIso(worldCupModeConfigMap.KNOCKOUT_STAGE.startsAt),
-      );
+    activePool?.mode === 'KNOCKOUT_STAGE' && joinContext?.locked === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -387,6 +446,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         setLeaderboard(nextContext.leaderboard);
         setPicks(nextContext.picks);
         setSidePicks(nextContext.sidePicks);
+        setJoinContext(nextContext.joinContext);
       } catch (err) {
         console.error('Failed to load office pool details:', err);
         setError('Failed to load office pool details');
@@ -415,6 +475,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     setLeaderboard(null);
     setPicks({});
     setSidePicks([]);
+    setJoinContext(null);
   };
 
   const goHome = () => {
@@ -475,12 +536,8 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       if (isScopedLaunch && !canCreateScopedPool) {
         throw new Error('Only Telegram group admins can create an Office Pool for this group');
       }
-      const trimmedName = createName.trim();
       const entryFee = Number(createEntryFee);
       const createModeConfig = worldCupModeConfigMap[createMode];
-      if (!trimmedName) {
-        throw new Error('Pool name is required');
-      }
       if (!Number.isFinite(entryFee) || entryFee <= 0) {
         throw new Error('Minimum entry fee must be greater than 0 PICK');
       }
@@ -496,15 +553,14 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         throw new Error('End date must be after the start date');
       }
       const payload: CreateOfficePoolRequest = {
-        name: trimmedName,
         mode: createMode,
         tournament: 'WORLD_CUP',
-        seasonKey: '2026',
-        startsAt: startOfDayIso(createModeConfig.startsAt),
-        endsAt: endOfDayIso(createModeConfig.endsAt),
-        scopeProvider,
+        season: '2026',
+        minEntryAmount: pickToRawString(entryFee),
+        maxEntryAmount: pickToRawString(Math.max(entryFee, 500)),
+        prizeAllocationPreset: 'top_4_40_30_20_10',
+        scopeProvider: scopeProvider?.toLowerCase(),
         scopeExternalId,
-        entryFee,
       };
 
       const pool = await officePoolApi.create(payload);
@@ -515,7 +571,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       setCreateNameTouched(false);
       setCreateEntryFeeTouched(false);
       openPool(pool.id, 'detail');
-      setNotice(`Created ${pool.name}. Players can now join with their locked Champion Picks.`);
+      setNotice(`Created ${getPoolNoticeTitle(pool)}. Players can now join with their locked tournament picks.`);
       refreshHomeInBackground();
     } catch (err: any) {
       console.error('Failed to create office pool:', err);
@@ -526,18 +582,21 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   };
 
   const handleJoinPool = async (
-    sidePicks: SetOfficePoolSidePickItem[],
+    structuralPicks: JoinOfficePoolRequest['structuralPicks'],
   ): Promise<OfficePoolJoinResponse | null> => {
     if (!activePool) return null;
     try {
       setIsSaving(true);
       setError(null);
       setNotice(null);
+      const entryAmount = joinContext?.minEntryAmount ?? activePool.minEntryAmount ?? '0';
       const response = await officePoolApi.join(activePool.id, {
-        sidePicks,
+        entryAmount,
+        idempotencyKey: `officepool-${activePool.id}-${Date.now()}`,
+        structuralPicks,
       });
-      openPool(response.pool.id, 'detail');
-      setNotice(`Joined ${response.pool.name}`);
+      openPool(response.pool?.id ?? activePool.id, 'detail');
+      setNotice('Joined Office Pool');
       refreshHomeInBackground();
       return response;
     } catch (err: any) {
@@ -556,7 +615,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     }
 
     const groupName = activePool.telegramGroupName?.trim() || 'this Telegram group';
-    const shareText = `Join "${activePool.name}" on DePick Office Pool in ${groupName}. After joining the Telegram group, open /officepool.`;
+    const shareText = `Join "${getPoolNoticeTitle(activePool)}" on DePick Office Pool in ${groupName}. After joining the Telegram group, open /officepool.`;
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(activePool.telegramGroupInviteUrl)}&text=${encodeURIComponent(shareText)}`;
     const telegramWebApp = (globalThis as any).Telegram?.WebApp;
     if (typeof telegramWebApp?.openTelegramLink === 'function') {
@@ -620,6 +679,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     picks,
     setPicks,
     sidePicks,
+    joinContext,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,

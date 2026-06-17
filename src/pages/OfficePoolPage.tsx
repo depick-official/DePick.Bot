@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  JoinOfficePoolRequest,
+  OfficePoolJoinContext,
   OfficePoolMode,
   OfficePoolPickOption,
+  OfficePoolPodiumTeam,
   OfficePoolPredictionSummary,
   OfficePoolSettlementStatus,
   OfficePoolSidePickSummary,
@@ -87,22 +90,22 @@ const WORLD_CUP_MODE_CONFIG: WorldCupModeConfig[] = [
   {
     mode: 'GROUP_STAGE',
     title: 'World Cup Group Stage',
-    badge: 'Incoming',
+    badge: 'Deferred',
     description: 'Play the 2026 World Cup opening phase with group-stage match picks and the required qualifying places for every group.',
     championPickLabel: 'Players choose Champion Picks for the required qualifying places in each group before joining. Those Champion Picks lock immediately after join.',
     startsAt: '2026-06-11',
     endsAt: '2026-06-27',
+    isLocked: true,
+    lockedMessage: 'Deferred for later rollout',
   },
   {
     mode: 'KNOCKOUT_STAGE',
     title: 'World Cup Knockout Stage',
-    badge: 'Locked',
+    badge: 'Launch',
     description: 'Run a knockout-only pool once the bracket begins, with high-stakes match picks and final podium selections.',
     championPickLabel: 'Players choose Podium picks for 1st, 2nd, and 3rd before joining. Those Podium picks lock when the knockout pool opens.',
     startsAt: '2026-06-29',
     endsAt: '2026-07-19',
-    isLocked: true,
-    lockedMessage: 'Starts Jun 29',
   },
 ];
 
@@ -113,6 +116,40 @@ const WORLD_CUP_MODE_CONFIG_MAP = Object.fromEntries(
 function formatDateTime(value: string) {
   const date = new Date(value);
   return utcDateTimeFormatter.format(date);
+}
+
+function formatOptionalDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return utcDateTimeFormatter.format(date);
+}
+
+function formatPoolWindow(pool: OfficePoolSummary) {
+  const start = formatOptionalDateTime(pool.startsAt) ?? formatOptionalDateTime(pool.tQ);
+  const end = formatOptionalDateTime(pool.endsAt) ?? formatOptionalDateTime(pool.joinClosesAt);
+  if (start && end) return `${start} - ${end}`;
+  if (start) return `Opens ${start}`;
+  if (end) return `Join closes ${end}`;
+  return 'Pending schedule';
+}
+
+function formatPickAmount(value?: number | string | null) {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : null;
+  const raw = BigInt(value);
+  const whole = raw / 1_000_000n;
+  const fraction = raw % 1_000_000n;
+  if (fraction === 0n) return whole.toString();
+  return `${whole}.${fraction.toString().padStart(6, '0').replace(/0+$/, '')}`;
+}
+
+function getPoolParticipantCount(pool: OfficePoolSummary) {
+  return pool.participants ?? pool.entrantCount ?? 0;
+}
+
+function getPoolMinimumEntry(pool: OfficePoolSummary) {
+  return formatPickAmount(pool.entryFee) ?? formatPickAmount(pool.minEntryAmount) ?? 'Pending';
 }
 
 function formatDate(value: string) {
@@ -145,6 +182,22 @@ function formatGroupQualifierSlotLabel(slotKey: GroupQualifierSlotKey) {
 
 function getModeLabel(mode: OfficePoolMode) {
   return WORLD_CUP_MODE_CONFIG_MAP[mode]?.title ?? mode;
+}
+
+function getPoolTitle(pool?: OfficePoolSummary | null) {
+  if (!pool) return 'Office Pool';
+  return pool.name?.trim() || pool.telegramGroupName?.trim() || getModeLabel(pool.mode);
+}
+
+function getPoolSubtitle(pool: OfficePoolSummary) {
+  const modeLabel = getModeLabel(pool.mode);
+  if (pool.telegramGroupName?.trim() && !pool.name?.trim()) {
+    return modeLabel;
+  }
+  if (pool.telegramGroupName?.trim()) {
+    return `${modeLabel} · ${pool.telegramGroupName}`;
+  }
+  return modeLabel;
 }
 
 function getPickLabel(option: OfficePoolPickOption) {
@@ -430,22 +483,40 @@ function buildJoinSidePickPayload(
   mode: OfficePoolMode,
   groupCards: GroupQualifierCard[],
   joinSidePickMap: Record<string, string>,
-) {
+  podiumRoster: OfficePoolPodiumTeam[],
+): JoinOfficePoolRequest['structuralPicks'] {
   if (mode === 'GROUP_STAGE') {
-    return groupCards.flatMap((groupCard) =>
+    return {
+      kind: 'GROUP',
+      qualifiers: groupCards.flatMap((groupCard) =>
       groupCard.qualifierSlotKeys.map((slotKey) => ({
         type: 'GROUP_QUALIFIER' as const,
         key: getGroupQualifierSidePickKey(groupCard.groupKey, slotKey),
         teamId: joinSidePickMap[getGroupQualifierSidePickKey(groupCard.groupKey, slotKey)],
       })),
-    );
+      ),
+    };
   }
 
-  return PODIUM_KEYS.map((key) => ({
-    type: 'PODIUM' as const,
-    key,
-    teamId: joinSidePickMap[key],
-  }));
+  const teamByIndex = new Map(
+    podiumRoster.map((team) => [String(team.teamIndex), team]),
+  );
+  const toTeamRef = (key: PodiumKey) => {
+    const team = teamByIndex.get(joinSidePickMap[key]);
+    return {
+      teamIndex: team?.teamIndex ?? 0,
+      displayName: team?.displayName ?? '',
+    };
+  };
+
+  return {
+    kind: 'KNOCKOUT',
+    podium: {
+      championTeamRef: toTeamRef('FIRST'),
+      runnerUpTeamRef: toTeamRef('SECOND'),
+      thirdTeamRef: toTeamRef('THIRD'),
+    },
+  };
 }
 
 function getLockedSidePickTitle(mode: OfficePoolMode) {
@@ -663,6 +734,7 @@ export default function OfficePoolPage() {
     picks,
     setPicks,
     sidePicks,
+    joinContext,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,
@@ -696,7 +768,19 @@ export default function OfficePoolPage() {
   } = useOfficePoolPageData(WORLD_CUP_MODE_CONFIG_MAP);
   const [activeMatchWindowIndex, setActiveMatchWindowIndex] = useState(0);
 
-  const availableTeams = useMemo(() => buildTeamOptions(predictions), [predictions]);
+  const podiumTeams = useMemo<TeamOption[]>(
+    () =>
+      (joinContext?.podiumRoster ?? []).map((team) => ({
+        id: String(team.teamIndex),
+        name: team.displayName,
+        logo: team.crestUrl ?? '',
+      })),
+    [joinContext?.podiumRoster],
+  );
+  const availableTeams = useMemo(
+    () => (activePool?.mode === 'KNOCKOUT_STAGE' ? podiumTeams : buildTeamOptions(predictions)),
+    [activePool?.mode, podiumTeams, predictions],
+  );
   const groupQualifierCards = useMemo(
     () => (activePool?.mode === 'GROUP_STAGE' ? buildGroupQualifierCards(predictions) : []),
     [activePool?.mode, predictions],
@@ -722,7 +806,24 @@ export default function OfficePoolPage() {
     return buildMatchPickWindows(predictions);
   }, [activePool?.mode, groupQualifierCards, predictions]);
   const activeMatchWindow = matchPickWindows[activeMatchWindowIndex] ?? null;
-  const isJoinReady = !!activePool && requiredJoinSidePickCount > 0 && joinSidePickCount === requiredJoinSidePickCount;
+  const isKnockoutJoinContextReady =
+    activePool?.mode !== 'KNOCKOUT_STAGE' || joinContext?.joinReadiness === 'READY';
+  const isJoinReady =
+    !!activePool &&
+    isKnockoutJoinContextReady &&
+    requiredJoinSidePickCount > 0 &&
+    joinSidePickCount === requiredJoinSidePickCount;
+  const joinDisabledReason = (() => {
+    if (isSaving) return null;
+    if (isJoinTemporarilyLocked) return 'Join Closed';
+    if (activePool?.mode === 'KNOCKOUT_STAGE' && joinContext?.joinReadiness !== 'READY') {
+      return 'Join Not Ready';
+    }
+    if (requiredJoinSidePickCount > 0 && joinSidePickCount < requiredJoinSidePickCount) {
+      return 'Select Podium Picks';
+    }
+    return null;
+  })();
   const lockedSidePickLines = useMemo(
     () => (activePool ? getLockedSidePickLines(activePool.mode, sidePicks, groupQualifierCards) : []),
     [activePool, groupQualifierCards, sidePicks],
@@ -753,8 +854,7 @@ export default function OfficePoolPage() {
   const createEnd = createModeConfig.endsAt;
 
   const createNameError = useMemo(() => {
-    if (!createSubmitAttempted && !createNameTouched) return null;
-    return createName.trim() ? null : 'Pool name is required.';
+    return null;
   }, [createName, createNameTouched, createSubmitAttempted]);
   const createEntryFeeError = useMemo(() => {
     if (!createSubmitAttempted && !createEntryFeeTouched) return null;
@@ -838,7 +938,12 @@ export default function OfficePoolPage() {
     if (!activePool || !isJoinReady) return;
 
     await submitJoinPool(
-      buildJoinSidePickPayload(activePool.mode, groupQualifierCards, joinSidePickMap),
+      buildJoinSidePickPayload(
+        activePool.mode,
+        groupQualifierCards,
+        joinSidePickMap,
+        joinContext?.podiumRoster ?? [],
+      ),
     );
   };
 
@@ -1030,7 +1135,7 @@ export default function OfficePoolPage() {
                     <div className="office-pool-panel-head">
                       <div>
                         <div className="office-pool-eyebrow">{getModeLabel(activePool.mode)}</div>
-                        <h2>{activePool.name}</h2>
+                        <h2>{getPoolTitle(activePool)}</h2>
                       </div>
                       {activePool.isMember && (
                         <button className="predict-button office-pool-inline-btn" onClick={() => setScreen('picks')}>
@@ -1041,9 +1146,9 @@ export default function OfficePoolPage() {
 
                     <div className="office-pool-meta-grid">
                       <div><span>Share</span><strong>{activePool.telegramGroupInviteUrl ? 'Group link ready' : 'Share manually'}</strong></div>
-                      <div><span>Joined</span><strong>{activePool.participants} players</strong></div>
-                      <div><span>Minimum entry</span><strong>{activePool.entryFee} PICK</strong></div>
-                      <div><span>Window (UTC)</span><strong>{formatDateTime(activePool.startsAt)} - {formatDateTime(activePool.endsAt)}</strong></div>
+                      <div><span>Joined</span><strong>{getPoolParticipantCount(activePool)} players</strong></div>
+                      <div><span>Minimum entry</span><strong>{getPoolMinimumEntry(activePool)} PICK</strong></div>
+                      <div><span>Window (UTC)</span><strong>{formatPoolWindow(activePool)}</strong></div>
                       <div><span>Format</span><strong>{getModeLabel(activePool.mode)}</strong></div>
                     </div>
                     <div className="office-pool-form office-pool-share-block">
@@ -1077,7 +1182,7 @@ export default function OfficePoolPage() {
                         </p>
                         {isJoinTemporarilyLocked ? (
                           <p className="office-pool-copy">
-                            World Cup Knockout Stage is locked for now. It will start on Jun 29 UTC.
+                            The join window is closed for this pool.
                           </p>
                         ) : null}
                         {activePool.mode === 'GROUP_STAGE' ? (
@@ -1093,6 +1198,7 @@ export default function OfficePoolPage() {
                         ) : (
                           <PodiumPicker
                             teams={availableTeams}
+                            joinContext={joinContext}
                             activeSlot={activePodiumKey}
                             joinSidePickMap={joinSidePickMap}
                             onSlotChange={setActivePodiumKey}
@@ -1100,7 +1206,7 @@ export default function OfficePoolPage() {
                           />
                         )}
                         <button className="predict-button" onClick={handleJoinPool} disabled={!isJoinReady || isSaving || isJoinTemporarilyLocked}>
-                          {isSaving ? 'Joining...' : 'Join Pool'}
+                          {isSaving ? 'Joining...' : joinDisabledReason ?? 'Join Pool'}
                         </button>
                         <p className="office-pool-copy">
                           {getJoinPickProgressLabel(activePool.mode)}: {joinSidePickCount}/{requiredJoinSidePickCount}
@@ -1406,15 +1512,15 @@ function PoolListSection({
           {pools.map((pool) => (
             <button key={pool.id} className="office-pool-card" onClick={() => onOpen(pool)}>
               <div className="office-pool-card-top">
-                <strong>{pool.name}</strong>
+                <strong>{getPoolTitle(pool)}</strong>
                 <span>{pool.status}</span>
               </div>
               <div className="office-pool-card-meta">
-                <span>{getModeLabel(pool.mode)}</span>
-                <span>{pool.participants} players joined</span>
+                <span>{getPoolSubtitle(pool)}</span>
+                <span>{getPoolParticipantCount(pool)} players joined</span>
               </div>
               <div className="office-pool-card-meta">
-                <span>{pool.entryFee} PICK min</span>
+                <span>{getPoolMinimumEntry(pool)} PICK min</span>
                 <span>{pool.isCreator ? 'Creator' : pool.isMember ? 'Joined' : 'Open'}</span>
               </div>
             </button>
@@ -1490,19 +1596,29 @@ function GroupQualifierPicker({
 
 function PodiumPicker({
   teams,
+  joinContext,
   activeSlot,
   joinSidePickMap,
   onSlotChange,
   onPick,
 }: {
   teams: TeamOption[];
+  joinContext: OfficePoolJoinContext | null;
   activeSlot: PodiumKey;
   joinSidePickMap: Record<string, string>;
   onSlotChange: (slot: PodiumKey) => void;
   onPick: (slot: PodiumKey, teamId: string) => void;
 }) {
+  if (joinContext?.joinReadiness && joinContext.joinReadiness !== 'READY') {
+    return (
+      <div className="empty">
+        <p>{joinContext.joinReadinessReason ?? 'Podium roster is not ready yet.'}</p>
+      </div>
+    );
+  }
+
   if (teams.length === 0) {
-    return <div className="empty"><p>No eligible teams found for this pool yet.</p></div>;
+    return <div className="empty"><p>Podium roster is not ready yet.</p></div>;
   }
 
   return (

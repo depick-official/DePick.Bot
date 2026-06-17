@@ -7,6 +7,7 @@ import { User } from '../types/User';
 import {
   CreateOfficePoolRequest,
   JoinOfficePoolRequest,
+  OfficePoolJoinContext,
   OfficePoolJoinResponse,
   OfficePoolLeaderboardResponse,
   OfficePoolMemberSummary,
@@ -179,6 +180,11 @@ export const officePoolApi = {
 
   join: async (id: string, data: JoinOfficePoolRequest): Promise<OfficePoolJoinResponse> => {
     const response = await api.post<OfficePoolJoinResponse>(`/office-pools/${id}/join`, data);
+    return response.data;
+  },
+
+  getJoinContext: async (id: string): Promise<OfficePoolJoinContext> => {
+    const response = await api.get<OfficePoolJoinContext>(`/office-pools/${id}/join-context`);
     return response.data;
   },
 

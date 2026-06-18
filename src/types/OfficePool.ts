@@ -153,8 +153,10 @@ export interface OfficePoolLeaderboardEntry {
   rank: number;
   userId: string;
   displayNameSnapshot: string;
+  displayName?: string | null;
   avatarSnapshot?: string | null;
   points: number;
+  score?: number | null;
   correctPicks: number;
   matchPoints: number;
   sidePickPoints: number;
@@ -163,21 +165,27 @@ export interface OfficePoolLeaderboardEntry {
   championPickTeamName?: string | null;
   championPickCorrect: boolean;
   prizeAmount?: number | null;
+  projectedPayout?: string | null;
+  entryAmount?: string | null;
 }
 
 export interface OfficePoolLeaderboardResponse {
-  pool: OfficePoolSummary;
-  leaderboard: OfficePoolLeaderboardEntry[];
-  completedMatches: number;
-  totalMatches: number;
-  championBonusPoints: number;
+  pool?: OfficePoolSummary;
+  poolId?: string;
+  canonicalScoringStatus?: string;
+  rows?: OfficePoolLeaderboardEntry[];
+  leaderboard?: OfficePoolLeaderboardEntry[];
+  completedMatches?: number;
+  totalMatches?: number;
+  championBonusPoints?: number;
   championWinnerTeamId?: string | null;
   championWinnerTeamName?: string | null;
-  resolvedSidePicks: OfficePoolSidePickSummary[];
-  totalPrizePool: number;
-  payoutResolved: boolean;
-  settlementReady: boolean;
-  settlementStatus: OfficePoolSettlementStatus;
+  resolvedSidePicks?: OfficePoolSidePickSummary[];
+  totalPrizePool?: number;
+  payoutResolved?: boolean;
+  settlementReady?: boolean;
+  settlementStatus?: OfficePoolSettlementStatus;
+  claimable?: boolean;
 }
 
 export interface OfficePoolJoinResponse {

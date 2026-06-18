@@ -262,21 +262,24 @@ async function fetchPoolContext(
   const canAdministerSettlement = canAdministerPoolFromLaunchScope(pool, options);
 
   if (isCanonicalPool(pool)) {
-    const [joinContext, settlementReadiness] = await Promise.all([
+    const [joinContext, settlementReadiness, predictions, picks, leaderboard] = await Promise.all([
       !pool.isMember ? fetchJoinContext(pool) : Promise.resolve(null),
       pool.isMember || canAdministerSettlement
         ? officePoolApi.getSettlementReadiness(poolId).catch(() => null)
         : Promise.resolve(null),
+      pool.isMember ? officePoolApi.getPredictions(poolId).catch(() => []) : Promise.resolve([]),
+      pool.isMember ? officePoolApi.getPicks(poolId).catch(() => ({})) : Promise.resolve({}),
+      pool.isMember ? officePoolApi.getLeaderboard(poolId).catch(() => null) : Promise.resolve(null),
     ]);
     return {
       pool,
       joinContext,
       settlementReadiness,
       settlementPreview: null as OfficePoolSettlementPreview | null,
-      predictions: [] as OfficePoolPredictionSummary[],
+      predictions,
       members: [] as OfficePoolMemberSummary[],
-      leaderboard: null as OfficePoolLeaderboardResponse | null,
-      picks: {} as Record<string, OfficePoolPickOption>,
+      leaderboard,
+      picks,
       sidePicks: [] as OfficePoolSidePickSummary[],
     };
   }
@@ -717,7 +720,11 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
       setError(null);
       setNotice(null);
       await officePoolApi.savePicks(activePool.id, picks);
-      const nextLeaderboard = await officePoolApi.getLeaderboard(activePool.id);
+      const [nextPicks, nextLeaderboard] = await Promise.all([
+        officePoolApi.getPicks(activePool.id).catch(() => picks),
+        officePoolApi.getLeaderboard(activePool.id).catch(() => leaderboard),
+      ]);
+      setPicks(nextPicks);
       setLeaderboard(nextLeaderboard);
       setNotice('Picks saved');
     } catch (err: any) {

@@ -805,7 +805,7 @@ function CreatorDashboard({
         Prize pool: {leaderboard.totalPrizePool} PICK
       </p>
       <p className="office-pool-copy">
-        {getSettlementCopy(leaderboard.settlementStatus, leaderboard.totalPrizePool)}
+        {getSettlementCopy(leaderboard.settlementStatus ?? 'NOT_READY', leaderboard.totalPrizePool ?? 0)}
       </p>
     </section>
   );
@@ -1107,13 +1107,17 @@ export default function OfficePoolPage() {
     ),
     [activePool, groupQualifierCards, leaderboard?.resolvedSidePicks, sidePicks],
   );
+  const leaderboardRows = useMemo(
+    () => leaderboard?.leaderboard ?? leaderboard?.rows ?? [],
+    [leaderboard],
+  );
   const sharedRanks = useMemo(() => {
     const counts = new Map<number, number>();
-    leaderboard?.leaderboard.forEach((entry) => {
+    leaderboardRows.forEach((entry) => {
       counts.set(entry.rank, (counts.get(entry.rank) ?? 0) + 1);
     });
     return counts;
-  }, [leaderboard]);
+  }, [leaderboardRows]);
   const canAdministerActivePool =
     !!activePool &&
     (activePool.isCreator ||
@@ -1621,24 +1625,27 @@ export default function OfficePoolPage() {
                           </span>
                         </div>
                         <div className="office-pool-leaderboard">
-                          {leaderboard?.leaderboard.map((entry) => {
+                          {leaderboardRows.map((entry) => {
                             const isMe = entry.userId === currentUserId;
                             const isSharedRank = (sharedRanks.get(entry.rank) ?? 0) > 1;
+                            const displayName = entry.displayNameSnapshot ?? entry.displayName ?? entry.userId;
+                            const score = entry.points ?? entry.score ?? 0;
+                            const projectedPrize = entry.prizeAmount ?? entry.projectedPayout;
                             return (
                               <div key={entry.userId} className={`office-pool-leaderboard-row ${isMe ? 'office-pool-leaderboard-me' : ''}`}>
                                 <div className="office-pool-leaderboard-main">
                                   <span className="office-pool-rank">#{entry.rank}</span>
                                   <div>
-                                    <strong>{entry.displayNameSnapshot}</strong>
+                                    <strong>{displayName}</strong>
                                     <div className="office-pool-copy-line">
-                                      {entry.matchPoints} match pts · {entry.sidePickPoints} Champion Pick pts
+                                      {entry.matchPoints ?? 0} match pts · {entry.sidePickPoints ?? 0} Champion Pick pts
                                       {isSharedRank ? ' · Shared place' : ''}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="office-pool-leaderboard-side">
-                                  <span>{entry.points} pts</span>
-                                  {entry.prizeAmount != null ? <span className="office-pool-prize-tag">{entry.prizeAmount} PICK</span> : null}
+                                  <span>{score} pts</span>
+                                  {projectedPrize != null ? <span className="office-pool-prize-tag">{projectedPrize} PICK</span> : null}
                                 </div>
                               </div>
                             );

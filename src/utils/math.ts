@@ -7,9 +7,11 @@ import { SelectedTeam, CurrencyType } from "../types/PredictionRecord";
  * @returns ratio (0.00-1.00)
  */
 export const calculatePredictRatio =
-    (totalAmount: number, teamAmount: number): number => {
-        if (totalAmount === 0) return 0;
-        return (teamAmount / totalAmount);
+    (totalAmount: number | null | undefined, teamAmount: number | null | undefined): number => {
+        const safeTotal = Number(totalAmount ?? 0);
+        const safeTeamAmount = Number(teamAmount ?? 0);
+        if (!Number.isFinite(safeTotal) || !Number.isFinite(safeTeamAmount) || safeTotal === 0) return 0;
+        return (safeTeamAmount / safeTotal);
     };
 
 /**
@@ -17,11 +19,13 @@ export const calculatePredictRatio =
  * @param num Number to format
  * @returns Formatted string
  */
-export const formatNumber = (num: number): string => {
-    if (num >= 1000) {
-        return (num / 1000).toFixed(1) + ' k';
+export const formatNumber = (num: number | null | undefined): string => {
+    const safeNumber = Number(num ?? 0);
+    if (!Number.isFinite(safeNumber)) return '0';
+    if (safeNumber >= 1000) {
+        return (safeNumber / 1000).toFixed(1) + ' k';
     }
-    return (num).toFixed(0);
+    return (safeNumber).toFixed(0);
 };
 
 /**

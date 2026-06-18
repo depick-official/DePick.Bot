@@ -636,6 +636,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         throw new Error('End date must be after the start date');
       }
       const payload: CreateOfficePoolRequest = {
+        name: createName.trim(),
         mode: createMode,
         tournament: 'WORLD_CUP',
         season: '2026',

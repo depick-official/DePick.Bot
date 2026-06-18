@@ -11,9 +11,9 @@ export type OfficePoolEntryClaimReadiness = 'NOT_CLAIMABLE' | 'CLAIMABLE' | 'CLA
 
 export interface OfficePoolSummary {
   id: string;
-  name: string;
-  creatorUserId: string;
-  creatorUsername: string;
+  name: string | null;
+  creatorUserId: string | null;
+  creatorUsername?: string | null;
   inviteCode: string;
   deepLinkUrl?: string | null;
   telegramGroupName?: string | null;
@@ -56,6 +56,7 @@ export interface OfficePoolScopeAccess {
 }
 
 export interface CreateOfficePoolRequest {
+  name?: string;
   mode: OfficePoolMode;
   tournament: string;
   season: string;

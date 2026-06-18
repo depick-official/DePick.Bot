@@ -1383,7 +1383,7 @@ export default function OfficePoolPage() {
                 ? 'Fetching the latest pool data'
                 : screen === 'detail'
                   ? getModeLabel(activePool?.mode ?? 'GROUP_STAGE')
-                  : activePool?.name
+                  : activePool?.name ?? undefined
             }
             backLabel={screen === 'detail' ? 'Dashboard' : 'Pool'}
             onBack={() => (screen === 'detail' ? goHome() : setScreen('detail'))}

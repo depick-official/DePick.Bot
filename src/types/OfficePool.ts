@@ -5,6 +5,9 @@ export type OfficePoolMode = 'GROUP_STAGE' | 'KNOCKOUT_STAGE';
 export type OfficePoolSidePickType = 'CHAMPION' | 'GROUP_QUALIFIER' | 'PODIUM';
 export type OfficePoolSettlementStatus = 'NOT_READY' | 'READY' | 'NO_PAID_ENTRIES' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
 export type OfficePoolPrizeAllocationPreset = 'winner_takes_all' | 'top_4_40_30_20_10';
+export type OfficePoolSettlementMode = 'NORMAL' | 'VOID_REFUND' | 'GUARDIAN_OVERRIDE';
+export type OfficePoolLevelReadiness = 'LOCKED_PLAYING' | 'SCORING_PENDING' | 'FINALIZABLE' | 'FINALIZED' | 'VOIDED';
+export type OfficePoolEntryClaimReadiness = 'NOT_CLAIMABLE' | 'CLAIMABLE' | 'CLAIMED';
 
 export interface OfficePoolSummary {
   id: string;
@@ -32,7 +35,7 @@ export interface OfficePoolSummary {
   maxEntryAmount?: string | null;
   prizeAllocationPreset?: OfficePoolPrizeAllocationPreset;
   rakeBps?: number;
-  lifecycleStatus?: 'CREATED' | 'OPEN' | 'LOCKED' | 'FINALIZED' | 'VOID';
+  lifecycleStatus?: 'CREATED' | 'OPEN' | 'LOCKED' | 'FINALIZED' | 'VOID' | 'VOIDED';
   participants?: number | null;
   entrantCount?: number | null;
   isMember: boolean;
@@ -183,4 +186,33 @@ export interface OfficePoolJoinResponse {
   onChain?: { txHash: string | null; status: 'PENDING' | 'CONFIRMED' | 'FAILED' };
   validation?: { ok: boolean; errors: string[] };
   canonicalReadiness?: 'READY' | 'PENDING_E15';
+}
+
+export interface OfficePoolSettlementReadinessEntry {
+  entryId: string;
+  userId: string;
+  claim: OfficePoolEntryClaimReadiness;
+}
+
+export interface OfficePoolSettlementReadiness {
+  poolLevel: OfficePoolLevelReadiness;
+  entries: OfficePoolSettlementReadinessEntry[];
+}
+
+export interface OfficePoolSettlementPreview {
+  grossPot: string;
+  rakeAmount: string;
+  netPrizePot: string;
+  bands: Array<{ prizeBandId: string; amount: string }>;
+  payouts: Array<{
+    entryId: string;
+    userId: string;
+    rank: number;
+    payoutAmount: string;
+  }>;
+}
+
+export interface FinalizeOfficePoolRequest {
+  settlementMode: OfficePoolSettlementMode;
+  guardianPayouts?: Record<string, string>;
 }

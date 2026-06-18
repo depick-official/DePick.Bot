@@ -7,14 +7,13 @@ interface WebappAuthResponse {
 }
 
 export async function bootstrapAuth(): Promise<string> {
-  const existingToken = tokenUtils.getToken();
-  if (existingToken && tokenUtils.isTokenValid()) {
-    return existingToken;
-  }
-
   const telegramWebApp = (window as any).Telegram?.WebApp;
   const initData = (telegramWebApp?.initData as string | undefined) ?? '';
   if (!initData) {
+    const existingToken = tokenUtils.getToken();
+    if (existingToken && tokenUtils.isTokenValid()) {
+      return existingToken;
+    }
     throw new Error('Missing Telegram WebApp initData - open this Mini App from Telegram');
   }
 

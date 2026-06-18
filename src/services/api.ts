@@ -6,6 +6,7 @@ import { PredictionRecord, CreatePredictionRecordRequest } from '../types/Predic
 import { User } from '../types/User';
 import {
   CreateOfficePoolRequest,
+  FinalizeOfficePoolRequest,
   JoinOfficePoolRequest,
   OfficePoolJoinContext,
   OfficePoolJoinResponse,
@@ -14,6 +15,8 @@ import {
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
   OfficePoolScopeAccess,
+  OfficePoolSettlementPreview,
+  OfficePoolSettlementReadiness,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
 } from '../types/OfficePool';
@@ -220,6 +223,26 @@ export const officePoolApi = {
 
   settle: async (id: string): Promise<OfficePoolLeaderboardResponse> => {
     const response = await api.post<OfficePoolLeaderboardResponse>(`/office-pools/${id}/settle`);
+    return response.data;
+  },
+
+  getSettlementReadiness: async (id: string): Promise<OfficePoolSettlementReadiness> => {
+    const response = await api.get<OfficePoolSettlementReadiness>(`/office-pools/${id}/settlement-readiness`);
+    return response.data;
+  },
+
+  previewSettlement: async (id: string, data: FinalizeOfficePoolRequest): Promise<OfficePoolSettlementPreview> => {
+    const response = await api.post<OfficePoolSettlementPreview>(`/office-pools/${id}/settlement-preview`, data);
+    return response.data;
+  },
+
+  finalize: async (id: string, data: FinalizeOfficePoolRequest): Promise<unknown> => {
+    const response = await api.post<unknown>(`/office-pools/${id}/finalize`, data);
+    return response.data;
+  },
+
+  claim: async (id: string): Promise<unknown> => {
+    const response = await api.post<unknown>(`/office-pools/${id}/claim`);
     return response.data;
   },
 };

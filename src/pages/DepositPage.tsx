@@ -112,9 +112,14 @@ export default function DepositPage() {
       setSubmitDone(true);
     } catch (err: any) {
       console.error('[deposit] session create failed', err);
-      setSubmitError(
-        err?.response?.data?.message ?? err?.message ?? 'Could not start deposit session.',
-      );
+      const rawMsg = err?.response?.data?.message ?? err?.message ?? 'Could not start deposit session.';
+      // The BE gates deposits on a registered external wallet (EOA) and returns a
+      // developer-facing string naming the DB column. Map it to a friendly,
+      // actionable message instead of leaking that internal wording to the user.
+      const friendlyMsg = /registered EOA/i.test(rawMsg)
+        ? 'Connect an external wallet first — buying PICK needs a wallet you control. In the bot, tap /settings → Register Wallet, then try again.'
+        : rawMsg;
+      setSubmitError(friendlyMsg);
     } finally {
       setIsSubmitting(false);
     }

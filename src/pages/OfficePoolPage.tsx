@@ -1125,10 +1125,20 @@ export default function OfficePoolPage() {
     ),
     [activePool, groupQualifierCards, leaderboard?.resolvedSidePicks, sidePicks],
   );
-  const leaderboardRows = useMemo(
-    () => leaderboard?.leaderboard ?? leaderboard?.rows ?? [],
-    [leaderboard],
-  );
+  const leaderboardRows = useMemo(() => {
+    const rows = leaderboard?.leaderboard ?? leaderboard?.rows ?? [];
+    return [...rows].sort((a, b) => {
+      const rankA = a.rank ?? Number.MAX_SAFE_INTEGER;
+      const rankB = b.rank ?? Number.MAX_SAFE_INTEGER;
+      if (rankA !== rankB) return rankA - rankB;
+      const scoreA = a.points ?? a.score ?? 0;
+      const scoreB = b.points ?? b.score ?? 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      const nameA = a.displayNameSnapshot ?? a.displayName ?? a.userId;
+      const nameB = b.displayNameSnapshot ?? b.displayName ?? b.userId;
+      return nameA.localeCompare(nameB);
+    });
+  }, [leaderboard]);
   const grossPrizePoolBaseUnits = useMemo(
     () =>
       leaderboardRows.reduce(

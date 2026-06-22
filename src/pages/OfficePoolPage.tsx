@@ -147,6 +147,24 @@ function formatPickAmount(value?: number | string | null) {
   return `${whole}.${fraction.toString().padStart(6, '0').replace(/0+$/, '')}`;
 }
 
+function formatPickAmountDisplay(value?: number | string | bigint | null) {
+  if (value == null) return '0';
+  if (typeof value === 'bigint') return formatPickAmount(value.toString()) ?? '0';
+  return formatPickAmount(value) ?? '0';
+}
+
+function parsePickBaseUnits(value?: number | string | null): bigint {
+  if (value == null) return 0n;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? BigInt(Math.round(value * 1_000_000)) : 0n;
+  }
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
+}
+
 function getPoolParticipantCount(pool: OfficePoolSummary) {
   return pool.participants ?? pool.entrantCount ?? 0;
 }
@@ -1111,6 +1129,30 @@ export default function OfficePoolPage() {
     () => leaderboard?.leaderboard ?? leaderboard?.rows ?? [],
     [leaderboard],
   );
+  const grossPrizePoolBaseUnits = useMemo(
+    () =>
+      leaderboardRows.reduce(
+        (total, entry) => total + parsePickBaseUnits(entry.entryAmount),
+        0n,
+      ),
+    [leaderboardRows],
+  );
+  const netPrizePoolBaseUnits = useMemo(() => {
+    if (leaderboard?.totalPrizePool != null) {
+      return parsePickBaseUnits(leaderboard.totalPrizePool);
+    }
+    const rakeBps = BigInt(activePool?.rakeBps ?? 0);
+    const rake = (grossPrizePoolBaseUnits * rakeBps) / 10_000n;
+    return grossPrizePoolBaseUnits > rake ? grossPrizePoolBaseUnits - rake : 0n;
+  }, [activePool?.rakeBps, grossPrizePoolBaseUnits, leaderboard?.totalPrizePool]);
+  const netPrizePoolLabel = formatPickAmountDisplay(netPrizePoolBaseUnits);
+  const leaderboardProgressLabel =
+    activePool &&
+    isPoolCanonical(activePool) &&
+    leaderboard?.completedMatches == null &&
+    leaderboard?.totalMatches == null
+      ? 'Scoring in progress'
+      : `${leaderboard?.completedMatches ?? 0}/${leaderboard?.totalMatches ?? 0} matches settled`;
   const sharedRanks = useMemo(() => {
     const counts = new Map<number, number>();
     leaderboardRows.forEach((entry) => {
@@ -1586,7 +1628,7 @@ export default function OfficePoolPage() {
                         <div className="office-pool-panel-head">
                           <h2>Prize Pool</h2>
                           <div className="office-pool-panel-actions">
-                            <span className="office-pool-progress">{leaderboard?.totalPrizePool ?? 0} PICK</span>
+                            <span className="office-pool-progress">{netPrizePoolLabel} PICK</span>
                             {activePool.isCreator && leaderboard?.settlementStatus === 'READY' ? (
                               <button className="predict-button office-pool-inline-btn" onClick={handleSettlePool} disabled={isSaving}>
                                 {isSaving ? 'Settling...' : 'Settle Pool'}
@@ -1601,14 +1643,14 @@ export default function OfficePoolPage() {
                           </div>
                           <div>
                             <span className="office-pool-copy-label">Total Prize</span>
-                            <strong>{leaderboard?.totalPrizePool ?? 0} PICK</strong>
+                            <strong>{netPrizePoolLabel} PICK</strong>
                           </div>
                         </div>
                         <p className="office-pool-copy">
-                          Winner takes the pot. If first place is tied, the {leaderboard?.totalPrizePool ?? 0} PICK reward is shared evenly across tied winners.
+                          Winner takes the net pot. If first place is tied, the {netPrizePoolLabel} PICK reward is shared evenly across tied winners.
                         </p>
                         <p className="office-pool-copy">
-                          {getSettlementCopy(leaderboard?.settlementStatus ?? 'NOT_READY', leaderboard?.totalPrizePool ?? 0)}
+                          {getSettlementCopy(leaderboard?.settlementStatus ?? 'NOT_READY', Number(netPrizePoolBaseUnits / 1_000_000n))}
                         </p>
                         <p className="office-pool-copy">
                           {getScoringCopy(activePool.mode)}
@@ -1621,7 +1663,7 @@ export default function OfficePoolPage() {
                         <div className="office-pool-panel-head">
                           <h2>Leaderboard</h2>
                           <span className="office-pool-progress">
-                            {leaderboard?.completedMatches ?? 0}/{leaderboard?.totalMatches ?? 0} matches settled
+                            {leaderboardProgressLabel}
                           </span>
                         </div>
                         <div className="office-pool-leaderboard">
@@ -1631,6 +1673,11 @@ export default function OfficePoolPage() {
                             const displayName = entry.displayNameSnapshot ?? entry.displayName ?? entry.userId;
                             const score = entry.points ?? entry.score ?? 0;
                             const projectedPrize = entry.prizeAmount ?? entry.projectedPayout;
+                            const projectedPrizeLabel =
+                              projectedPrize != null ? formatPickAmountDisplay(projectedPrize) : null;
+                            const detailLine = isPoolCanonical(activePool)
+                              ? `${score} canonical pts${isSharedRank ? ' · Shared place' : ''}`
+                              : `${entry.matchPoints ?? 0} match pts · ${entry.sidePickPoints ?? 0} Champion Pick pts${isSharedRank ? ' · Shared place' : ''}`;
                             return (
                               <div key={entry.userId} className={`office-pool-leaderboard-row ${isMe ? 'office-pool-leaderboard-me' : ''}`}>
                                 <div className="office-pool-leaderboard-main">
@@ -1638,14 +1685,13 @@ export default function OfficePoolPage() {
                                   <div>
                                     <strong>{displayName}</strong>
                                     <div className="office-pool-copy-line">
-                                      {entry.matchPoints ?? 0} match pts · {entry.sidePickPoints ?? 0} Champion Pick pts
-                                      {isSharedRank ? ' · Shared place' : ''}
+                                      {detailLine}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="office-pool-leaderboard-side">
                                   <span>{score} pts</span>
-                                  {projectedPrize != null ? <span className="office-pool-prize-tag">{projectedPrize} PICK</span> : null}
+                                  {projectedPrizeLabel != null ? <span className="office-pool-prize-tag">{projectedPrizeLabel} PICK</span> : null}
                                 </div>
                               </div>
                             );

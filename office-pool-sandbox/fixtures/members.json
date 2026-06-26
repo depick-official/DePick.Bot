@@ -1,0 +1,18 @@
+[
+  {
+    "userId": "telegram-user-1001",
+    "displayNameSnapshot": "pool_admin",
+    "avatarSnapshot": null,
+    "championPickTeamId": null,
+    "championPickTeamName": null,
+    "createTime": "2026-06-14T12:00:00.000Z"
+  },
+  {
+    "userId": "telegram-user-1002",
+    "displayNameSnapshot": "pool_player",
+    "avatarSnapshot": null,
+    "championPickTeamId": null,
+    "championPickTeamName": null,
+    "createTime": "2026-06-14T12:05:00.000Z"
+  }
+]

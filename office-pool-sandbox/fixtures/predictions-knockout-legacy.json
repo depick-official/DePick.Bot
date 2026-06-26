@@ -1,0 +1,50 @@
+[
+  {
+    "id": "KO-R32-M01",
+    "datetime": "2026-06-29T19:00:00.000Z",
+    "fixture": "2000001",
+    "roundLabel": "Round of 32",
+    "tournament": "WORLD_CUP",
+    "status": "UPCOMING",
+    "result": "PENDING",
+    "homeTeamId": "team-mexico",
+    "homeTeamName": "Mexico",
+    "homeTeamLogo": "",
+    "awayTeamId": "team-japan",
+    "awayTeamName": "Japan",
+    "awayTeamLogo": "",
+    "isLocked": false
+  },
+  {
+    "id": "KO-R32-M02",
+    "datetime": "2026-06-30T19:00:00.000Z",
+    "fixture": "2000002",
+    "roundLabel": "Round of 32",
+    "tournament": "WORLD_CUP",
+    "status": "UPCOMING",
+    "result": "PENDING",
+    "homeTeamId": "team-canada",
+    "homeTeamName": "Canada",
+    "homeTeamLogo": "",
+    "awayTeamId": "team-croatia",
+    "awayTeamName": "Croatia",
+    "awayTeamLogo": "",
+    "isLocked": false
+  },
+  {
+    "id": "KO-R16-M01",
+    "datetime": "2026-07-04T19:00:00.000Z",
+    "fixture": "2000017",
+    "roundLabel": "Round of 16",
+    "tournament": "WORLD_CUP",
+    "status": "UPCOMING",
+    "result": "PENDING",
+    "homeTeamId": "team-brazil",
+    "homeTeamName": "Brazil",
+    "homeTeamLogo": "",
+    "awayTeamId": "team-germany",
+    "awayTeamName": "Germany",
+    "awayTeamLogo": "",
+    "isLocked": false
+  }
+]

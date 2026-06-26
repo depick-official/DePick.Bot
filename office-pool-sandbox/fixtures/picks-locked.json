@@ -1,0 +1,16 @@
+{
+  "picks": [
+    {
+      "slotId": "slot-GROUP_A-M01",
+      "choice": "HOME",
+      "lockAt": "2026-06-16T19:00:00.000Z",
+      "isLocked": true
+    },
+    {
+      "slotId": "slot-GROUP_A-M02",
+      "choice": "DRAW",
+      "lockAt": "2026-06-17T16:00:00.000Z",
+      "isLocked": false
+    }
+  ]
+}

@@ -112,9 +112,14 @@ export default function DepositPage() {
       setSubmitDone(true);
     } catch (err: any) {
       console.error('[deposit] session create failed', err);
-      setSubmitError(
-        err?.response?.data?.message ?? err?.message ?? 'Could not start deposit session.',
-      );
+      const rawMsg = err?.response?.data?.message ?? err?.message ?? 'Could not start deposit session.';
+      // The BE gates deposits on a registered external wallet (EOA) and returns a
+      // developer-facing string naming the DB column. Map it to a friendly,
+      // actionable message instead of leaking that internal wording to the user.
+      const friendlyMsg = /registered EOA/i.test(rawMsg)
+        ? 'Connect an external wallet first — buying PICK needs a wallet you control. In the bot, tap /settings → Register Wallet, then try again.'
+        : rawMsg;
+      setSubmitError(friendlyMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -146,7 +151,9 @@ export default function DepositPage() {
           <h1>📨 Sent to chat</h1>
           <p>
             Check your Telegram chat — we sent you a <b>Sign Deposit</b> button.
-            Tap it to sign the permit and complete the deposit.
+            Tap it to {tokenSpec?.gaslessMethod === 'FALLBACK_APPROVE'
+              ? 'approve the token in your wallet'
+              : 'sign the gasless permit'} and complete the deposit.
           </p>
         </div>
         <button
@@ -249,6 +256,17 @@ export default function DepositPage() {
           })}
         </div>
       </div>
+
+      {tokenSpec && (
+        <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.45, color: '#cac5d6' }}>
+          {tokenSpec.gaslessMethod === 'FALLBACK_APPROVE' ? (
+            <>⛽ You'll send an <b>approval transaction</b> in your wallet and pay a small{' '}
+            {chainSpec?.chainCurrency ?? 'network'} gas fee.</>
+          ) : (
+            <>✨ <b>Gasless</b> — you'll sign a free signature; no network gas needed.</>
+          )}
+        </div>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', marginBottom: 8, color: '#cac5d6', fontSize: 13 }}>

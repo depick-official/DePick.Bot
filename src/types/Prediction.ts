@@ -22,12 +22,12 @@ export interface Prediction {
     totalPoolAmountCredit: number;
     homeTeamPoolCredit: number;
     awayTeamPoolCredit: number;
-    // ── M4.1 chain-native fields ──
+    // ── M4.1 chain-native fields (the BE serves these; the FE renders odds/depth from them) ──
     homeOdds: number;                 // [0,1], sum-to-1 with awayOdds
     awayOdds: number;
     marketId: number | null;          // null for NAIVE
     marketContractAddress: string;
-    marketCollateralToken: number;    // PICK; chain-native depth (M4.1 / M4.5)
+    marketCollateralToken: number;    // PICK; chain-native pool DEPTH (use this for "Token Pool")
     marketVolumeToken: { home: number; away: number; total: number };
     tournament?: string;
     status: PredictionGameStatus | string;
@@ -50,4 +50,4 @@ export interface QuoteResponse {
     avgEntryPrice: number;     // [0,1]
     potentialPayout: number;   // GROSS of claim-time withdraw fee — render as "To Win"
     mmType: 'LMSR' | 'NAIVE';
-} 
+}

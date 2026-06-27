@@ -1,0 +1,23 @@
+{
+  "readiness": "READY",
+  "settlementMode": "VOID_REFUND",
+  "grossPot": "350000000",
+  "rakeAmount": "0",
+  "netPrizePot": "350000000",
+  "prizeAllocationPreset": "top_4_40_30_20_10",
+  "rankBands": [],
+  "payouts": [
+    {
+      "entryId": "entry-telegram-user-1002",
+      "rank": 1,
+      "prizeBandId": null,
+      "payoutAmount": "250000000"
+    },
+    {
+      "entryId": "entry-telegram-user-1001",
+      "rank": 1,
+      "prizeBandId": null,
+      "payoutAmount": "100000000"
+    }
+  ]
+}

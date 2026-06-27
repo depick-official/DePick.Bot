@@ -8,13 +8,14 @@ export default defineConfig(({ mode }) => {
     .map((host) => host.trim())
     .filter(Boolean);
   const allowAllHosts = env.VITE_ALLOW_ALL_HOSTS === 'true';
+  const devPort = Number(env.VITE_DEV_PORT || 8080);
 
   return {
     plugins: [react()],
     base: '/',
     server: {
       host: '0.0.0.0',
-      port: 8080,
+      port: devPort,
       allowedHosts: allowAllHosts ? true : allowedHosts,
     },
   };

@@ -180,7 +180,10 @@ export const predictionApi = {
   },
 
   getUpcoming: async (): Promise<Prediction[]> => {
-    const response = await api.get<Prediction[]>('/predictions');
+    // /predictions/active returns only UPCOMING + ON_GOING (server enriches just
+    // those). The old /predictions enriched every finished game too and ran ~34s,
+    // past Axios's 30s timeout. Keep the UPCOMING client filter for display parity.
+    const response = await api.get<Prediction[]>('/predictions/active');
     return response.data.filter(p => p.status === 'UPCOMING');
   },
 

@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
+import OfficePoolPage from './pages/OfficePoolPage';
 import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
 
 type AuthState =
@@ -63,10 +64,12 @@ function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<PredictPage />} />
       <Route path="/predict" element={<PredictPage />} />
       <Route path="/predict/:matchId" element={<PredictPage />} />
       <Route path="/mini-game" element={<MiniGamePage />} />
       <Route path="/deposit" element={<DepositPage />} />
+      <Route path="/office-pool" element={<OfficePoolPage />} />
     </Routes>
   );
 }

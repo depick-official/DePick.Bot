@@ -1,0 +1,30 @@
+[
+  {
+    "slotId": "KO-R32-M01",
+    "fixture": {
+      "providerFixtureId": "2000001",
+      "homeTeamRef": {
+        "teamIndex": 1,
+        "providerTeamId": 1001,
+        "displayName": "Mexico"
+      },
+      "awayTeamRef": {
+        "teamIndex": 32,
+        "providerTeamId": 1032,
+        "displayName": "Japan"
+      },
+      "kickoffUtc": "2026-06-29T19:00:00.000Z"
+    },
+    "lockAt": "2026-06-29T19:00:00.000Z",
+    "isLocked": false,
+    "isScoreableForPool": true
+  },
+  {
+    "slotId": "KO-R32-M02",
+    "fixture": null,
+    "lockAt": "2026-06-30T19:00:00.000Z",
+    "isLocked": false,
+    "isScoreableForPool": false,
+    "statusReason": "NOT_RESOLVED"
+  }
+]

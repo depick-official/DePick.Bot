@@ -1,0 +1,9 @@
+{
+  "mode": "GROUP_STAGE",
+  "projectedTq": "2026-06-24T12:00:00.000Z",
+  "scoreableMatchCount": 24,
+  "minScoreableRequired": 36,
+  "eligible": false,
+  "ineligibleReason": "Fewer than 36 group-stage matches remain scoreable after T_q",
+  "canonicalReadiness": "PENDING_E11"
+}

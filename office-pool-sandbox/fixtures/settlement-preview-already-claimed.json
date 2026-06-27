@@ -1,0 +1,56 @@
+{
+  "readiness": "READY",
+  "grossPot": "350000000",
+  "rakeAmount": "17500000",
+  "netPrizePot": "332500000",
+  "prizeAllocationPreset": "top_4_40_30_20_10",
+  "rankBands": [
+    {
+      "prizeBandId": "rank-1",
+      "rankStart": 1,
+      "rankEnd": 1,
+      "memberEntryIds": [
+        "entry-telegram-user-1002"
+      ]
+    },
+    {
+      "prizeBandId": "rank-2",
+      "rankStart": 2,
+      "rankEnd": 2,
+      "memberEntryIds": [
+        "entry-telegram-user-1001"
+      ]
+    }
+  ],
+  "payouts": [
+    {
+      "entryId": "entry-telegram-user-1002",
+      "rank": 1,
+      "prizeBandId": "rank-1",
+      "payoutAmount": "133000000"
+    },
+    {
+      "entryId": "entry-telegram-user-1001",
+      "rank": 2,
+      "prizeBandId": "rank-2",
+      "payoutAmount": "99750000"
+    }
+  ],
+  "claimReadiness": "CLAIMED",
+  "claims": [
+    {
+      "entryId": "entry-telegram-user-1002",
+      "userId": "telegram-user-1002",
+      "finalPayout": "133000000",
+      "claimStatus": "CLAIMED",
+      "claimTxHash": "0xclaimwinner"
+    },
+    {
+      "entryId": "entry-telegram-user-1001",
+      "userId": "telegram-user-1001",
+      "finalPayout": "99750000",
+      "claimStatus": "CLAIMED",
+      "claimTxHash": "0xclaimrunnerup"
+    }
+  ]
+}

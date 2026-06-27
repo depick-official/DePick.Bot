@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  FinalizeOfficePoolRequest,
   JoinOfficePoolRequest,
   OfficePoolJoinContext,
-  OfficePoolSettlementPreview,
+  OfficePoolLevelReadiness,
   OfficePoolSettlementReadiness,
   OfficePoolMode,
   OfficePoolPickOption,
@@ -726,8 +725,8 @@ function getSettlementCopy(status: OfficePoolSettlementStatus, totalPrizePool: n
   }
 }
 
-function getPoolLevelCopy(readiness?: OfficePoolSettlementReadiness | null) {
-  switch (readiness?.poolLevel) {
+function getPoolLevelCopy(level?: OfficePoolLevelReadiness | null) {
+  switch (level) {
     case 'LOCKED_PLAYING':
       return 'Pool is locked and matches are still being played.';
     case 'SCORING_PENDING':
@@ -763,33 +762,6 @@ function getMyClaimState(
 ) {
   if (!currentUserId) return null;
   return readiness?.entries.find((entry) => entry.userId === currentUserId) ?? null;
-}
-
-function parseGuardianPayouts(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return {};
-  }
-  const parsed = JSON.parse(trimmed);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Guardian payouts must be a JSON object of entryId to raw amount string.');
-  }
-
-  return Object.fromEntries(
-    Object.entries(parsed).map(([entryId, amount]) => {
-      if (typeof amount !== 'string' || !/^\d+$/.test(amount)) {
-        throw new Error('Guardian payout amounts must be raw decimal strings.');
-      }
-      return [entryId, amount];
-    }),
-  );
-}
-
-function buildOverridePayload(guardianPayoutsJson: string): FinalizeOfficePoolRequest {
-  return {
-    settlementMode: 'GUARDIAN_OVERRIDE',
-    guardianPayouts: parseGuardianPayouts(guardianPayoutsJson),
-  };
 }
 
 function getScoringCopy(mode: OfficePoolMode) {
@@ -832,46 +804,37 @@ function CreatorDashboard({
 function SettlementPanel({
   canAdministerSettlement,
   readiness,
-  preview,
+  liveReadiness,
   currentUserId,
   isSaving,
   onRefresh,
-  onPreview,
-  onFinalize,
+  onFinalizePrepare,
+  onFinalizeLive,
   onClaim,
 }: {
   canAdministerSettlement: boolean;
   readiness: OfficePoolSettlementReadiness | null;
-  preview: OfficePoolSettlementPreview | null;
+  liveReadiness: OfficePoolLevelReadiness | null;
   currentUserId?: string;
   isSaving: boolean;
   onRefresh: () => Promise<OfficePoolSettlementReadiness | null>;
-  onPreview: (payload: FinalizeOfficePoolRequest) => Promise<OfficePoolSettlementPreview | null>;
-  onFinalize: (payload: FinalizeOfficePoolRequest) => Promise<boolean>;
+  onFinalizePrepare: () => Promise<boolean>;
+  onFinalizeLive: () => Promise<boolean>;
   onClaim: () => Promise<boolean>;
 }) {
-  const [guardianPayoutsJson, setGuardianPayoutsJson] = useState('{}');
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [isPrepared, setIsPrepared] = useState(false);
   const myClaim = getMyClaimState(readiness, currentUserId);
   const canClaim = myClaim?.claim === 'CLAIMABLE';
-
-  const withOverridePayload = async (
-    action: (payload: FinalizeOfficePoolRequest) => Promise<unknown>,
-  ) => {
-    try {
-      setLocalError(null);
-      await action(buildOverridePayload(guardianPayoutsJson));
-    } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Invalid guardian payout vector.');
-    }
-  };
+  // E16b /live-readiness is the authoritative finalize gate for canonical knockout pools;
+  // the E16a poolLevel never derives FINALIZABLE (A6). Fall back to poolLevel when live is absent.
+  const effectiveLevel = liveReadiness ?? readiness?.poolLevel ?? null;
 
   return (
     <section className="office-pool-panel">
       <div className="office-pool-panel-head">
         <div>
           <h2>Settlement</h2>
-          <p className="office-pool-copy">{getPoolLevelCopy(readiness)}</p>
+          <p className="office-pool-copy">{getPoolLevelCopy(effectiveLevel)}</p>
         </div>
         <button
           className="predict-button office-pool-inline-btn"
@@ -886,7 +849,7 @@ function SettlementPanel({
       <div className="office-pool-entry-card">
         <div>
           <span className="office-pool-copy-label">Pool state</span>
-          <strong>{formatEnumLabel(readiness?.poolLevel ?? 'Unknown')}</strong>
+          <strong>{formatEnumLabel(effectiveLevel ?? 'Unknown')}</strong>
         </div>
         <div>
           <span className="office-pool-copy-label">Your claim</span>
@@ -905,78 +868,32 @@ function SettlementPanel({
         </div>
       ) : null}
 
-      {preview ? (
-        <div className="office-pool-member-list">
-          <div className="office-pool-member-row">
-            <strong>Gross pot</strong>
-            <span>{formatPickAmount(preview.grossPot)} PICK</span>
-          </div>
-          <div className="office-pool-member-row">
-            <strong>Rake</strong>
-            <span>{formatPickAmount(preview.rakeAmount)} PICK</span>
-          </div>
-          <div className="office-pool-member-row">
-            <strong>Net prize pot</strong>
-            <span>{formatPickAmount(preview.netPrizePot)} PICK</span>
-          </div>
-          {preview.payouts.map((payout) => (
-            <div key={payout.entryId} className="office-pool-member-row">
-              <strong title={payout.entryId}>{formatEntryId(payout.entryId)}</strong>
-              <span>{formatPickAmount(payout.payoutAmount)} PICK</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {canAdministerSettlement ? (
+      {canAdministerSettlement && effectiveLevel === 'FINALIZABLE' ? (
         <div className="office-pool-form">
           <div className="office-pool-inline-row office-pool-inline-row-equal">
             <button
               className="predict-button office-pool-inline-btn"
-              onClick={() => onPreview({ settlementMode: 'VOID_REFUND' })}
+              onClick={async () => {
+                const ok = await onFinalizePrepare();
+                if (ok) setIsPrepared(true);
+              }}
               disabled={isSaving}
               type="button"
             >
-              Preview Void
+              Prepare Finalization
             </button>
             <button
               className="predict-button office-pool-inline-btn"
-              onClick={() => onFinalize({ settlementMode: 'VOID_REFUND' })}
-              disabled={isSaving}
+              onClick={onFinalizeLive}
+              disabled={isSaving || !isPrepared}
               type="button"
             >
-              Void Pool
+              Finalize Pool
             </button>
           </div>
-
-          <label>
-            <span>Guardian override payouts</span>
-            <textarea
-              value={guardianPayoutsJson}
-              onChange={(event) => setGuardianPayoutsJson(event.target.value)}
-              placeholder='{"entry-id":"10000000"}'
-              rows={4}
-            />
-          </label>
-          {localError ? <p className="office-pool-field-error">{localError}</p> : null}
-          <div className="office-pool-inline-row office-pool-inline-row-equal">
-            <button
-              className="predict-button office-pool-inline-btn"
-              onClick={() => withOverridePayload(onPreview)}
-              disabled={isSaving}
-              type="button"
-            >
-              Preview Override
-            </button>
-            <button
-              className="predict-button office-pool-inline-btn"
-              onClick={() => withOverridePayload(onFinalize)}
-              disabled={isSaving}
-              type="button"
-            >
-              Finalize Override
-            </button>
-          </div>
+          <p className="office-pool-copy">
+            Step 1 locks the scores on-chain; step 2 settles the pool and opens claims.
+          </p>
         </div>
       ) : null}
 
@@ -1013,7 +930,7 @@ export default function OfficePoolPage() {
     sidePicks,
     joinContext,
     settlementReadiness,
-    settlementPreview,
+    liveReadiness,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,
@@ -1045,8 +962,8 @@ export default function OfficePoolPage() {
     handleSavePicks,
     handleSettlePool,
     handleRefreshSettlementReadiness,
-    handlePreviewSettlement,
-    handleFinalizeSettlement,
+    handleFinalizePrepare,
+    handleFinalizeLive,
     handleClaimSettlement,
     handleShareGroupLink,
   } = useOfficePoolPageData(WORLD_CUP_MODE_CONFIG_MAP);
@@ -1543,12 +1460,12 @@ export default function OfficePoolPage() {
                         <SettlementPanel
                           canAdministerSettlement={canAdministerActivePool}
                           readiness={settlementReadiness}
-                          preview={settlementPreview}
+                          liveReadiness={liveReadiness}
                           currentUserId={currentUserId}
                           isSaving={isSaving}
                           onRefresh={handleRefreshSettlementReadiness}
-                          onPreview={handlePreviewSettlement}
-                          onFinalize={handleFinalizeSettlement}
+                          onFinalizePrepare={handleFinalizePrepare}
+                          onFinalizeLive={handleFinalizeLive}
                           onClaim={handleClaimSettlement}
                         />
                       ) : null}
@@ -1623,12 +1540,12 @@ export default function OfficePoolPage() {
                         <SettlementPanel
                           canAdministerSettlement={canAdministerActivePool}
                           readiness={settlementReadiness}
-                          preview={settlementPreview}
+                          liveReadiness={liveReadiness}
                           currentUserId={currentUserId}
                           isSaving={isSaving}
                           onRefresh={handleRefreshSettlementReadiness}
-                          onPreview={handlePreviewSettlement}
-                          onFinalize={handleFinalizeSettlement}
+                          onFinalizePrepare={handleFinalizePrepare}
+                          onFinalizeLive={handleFinalizeLive}
                           onClaim={handleClaimSettlement}
                         />
                       ) : null}
@@ -1742,9 +1659,6 @@ export default function OfficePoolPage() {
                           : 'Choose Home, Draw, or Away for each match window.'}
                       </p>
                     </div>
-                    <button className="predict-button office-pool-inline-btn" onClick={handleSavePicks} disabled={isSaving || !activePool.isMember}>
-                      {isSaving ? 'Saving...' : 'Save Picks'}
-                    </button>
                   </div>
                   {!activePool.isMember ? (
                     <div className="empty"><p>Join this pool first.</p></div>
@@ -1820,6 +1734,13 @@ export default function OfficePoolPage() {
                         );
                       })}
                       </div>
+                      <button
+                        className="predict-button"
+                        onClick={handleSavePicks}
+                        disabled={isSaving || !activePool.isMember}
+                      >
+                        {isSaving ? 'Saving...' : 'Save Picks'}
+                      </button>
                     </>
                   )}
                 </section>

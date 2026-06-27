@@ -5,7 +5,6 @@ import { officePoolApi } from '../services/api';
 import { tokenUtils } from '../utils/token';
 import {
   CreateOfficePoolRequest,
-  FinalizeOfficePoolRequest,
   JoinOfficePoolRequest,
   OfficePoolJoinContext,
   OfficePoolJoinResponse,
@@ -13,8 +12,8 @@ import {
   OfficePoolMemberSummary,
   OfficePoolMode,
   OfficePoolPickOption,
+  OfficePoolLevelReadiness,
   OfficePoolPredictionSummary,
-  OfficePoolSettlementPreview,
   OfficePoolSettlementReadiness,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
@@ -262,20 +261,24 @@ async function fetchPoolContext(
   const canAdministerSettlement = canAdministerPoolFromLaunchScope(pool, options);
 
   if (isCanonicalPool(pool)) {
-    const [joinContext, settlementReadiness, predictions, picks, leaderboard] = await Promise.all([
-      !pool.isMember ? fetchJoinContext(pool) : Promise.resolve(null),
-      pool.isMember || canAdministerSettlement
-        ? officePoolApi.getSettlementReadiness(poolId).catch(() => null)
-        : Promise.resolve(null),
-      pool.isMember ? officePoolApi.getPredictions(poolId).catch(() => []) : Promise.resolve([]),
-      pool.isMember ? officePoolApi.getPicks(poolId).catch(() => ({})) : Promise.resolve({}),
-      pool.isMember ? officePoolApi.getLeaderboard(poolId).catch(() => null) : Promise.resolve(null),
-    ]);
+    const [joinContext, settlementReadiness, liveReadiness, predictions, picks, leaderboard] =
+      await Promise.all([
+        !pool.isMember ? fetchJoinContext(pool) : Promise.resolve(null),
+        pool.isMember || canAdministerSettlement
+          ? officePoolApi.getSettlementReadiness(poolId).catch(() => null)
+          : Promise.resolve(null),
+        pool.isMember || canAdministerSettlement
+          ? officePoolApi.getLiveReadiness(poolId).catch(() => null)
+          : Promise.resolve(null),
+        pool.isMember ? officePoolApi.getPredictions(poolId).catch(() => []) : Promise.resolve([]),
+        pool.isMember ? officePoolApi.getPicks(poolId).catch(() => ({})) : Promise.resolve({}),
+        pool.isMember ? officePoolApi.getLeaderboard(poolId).catch(() => null) : Promise.resolve(null),
+      ]);
     return {
       pool,
       joinContext,
       settlementReadiness,
-      settlementPreview: null as OfficePoolSettlementPreview | null,
+      liveReadiness,
       predictions,
       members: [] as OfficePoolMemberSummary[],
       leaderboard,
@@ -302,7 +305,7 @@ async function fetchPoolContext(
       sidePicks,
       joinContext: null as OfficePoolJoinContext | null,
       settlementReadiness: null as OfficePoolSettlementReadiness | null,
-      settlementPreview: null as OfficePoolSettlementPreview | null,
+      liveReadiness: null as OfficePoolLevelReadiness | null,
     };
   }
 
@@ -323,7 +326,7 @@ async function fetchPoolContext(
     picks: {} as Record<string, OfficePoolPickOption>,
     sidePicks: [] as OfficePoolSidePickSummary[],
     settlementReadiness: null as OfficePoolSettlementReadiness | null,
-    settlementPreview: null as OfficePoolSettlementPreview | null,
+    liveReadiness: null as OfficePoolLevelReadiness | null,
   };
 }
 
@@ -349,7 +352,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
   const [sidePicks, setSidePicks] = useState<OfficePoolSidePickSummary[]>([]);
   const [joinContext, setJoinContext] = useState<OfficePoolJoinContext | null>(null);
   const [settlementReadiness, setSettlementReadiness] = useState<OfficePoolSettlementReadiness | null>(null);
-  const [settlementPreview, setSettlementPreview] = useState<OfficePoolSettlementPreview | null>(null);
+  const [liveReadiness, setLiveReadiness] = useState<OfficePoolLevelReadiness | null>(null);
   const [joinSidePickMap, setJoinSidePickMap] = useState<Record<string, string>>({});
   const [activeQualifierGroupIndex, setActiveQualifierGroupIndex] = useState(0);
   const [activePodiumKey, setActivePodiumKey] = useState<PodiumKey>('FIRST');
@@ -530,7 +533,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
         setSidePicks(nextContext.sidePicks);
         setJoinContext(nextContext.joinContext);
         setSettlementReadiness(nextContext.settlementReadiness);
-        setSettlementPreview(nextContext.settlementPreview);
+        setLiveReadiness(nextContext.liveReadiness ?? null);
       } catch (err) {
         console.error('Failed to load office pool details:', err);
         setError('Failed to load office pool details');
@@ -561,7 +564,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     setSidePicks([]);
     setJoinContext(null);
     setSettlementReadiness(null);
-    setSettlementPreview(null);
+    setLiveReadiness(null);
   };
 
   const goHome = () => {
@@ -757,8 +760,12 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     try {
       setIsSaving(true);
       setError(null);
-      const nextReadiness = await officePoolApi.getSettlementReadiness(activePool.id);
+      const [nextReadiness, nextLive] = await Promise.all([
+        officePoolApi.getSettlementReadiness(activePool.id),
+        officePoolApi.getLiveReadiness(activePool.id).catch(() => null),
+      ]);
       setSettlementReadiness(nextReadiness);
+      setLiveReadiness(nextLive);
       return nextReadiness;
     } catch (err: any) {
       console.error('Failed to refresh office pool settlement readiness:', err);
@@ -769,49 +776,55 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     }
   };
 
-  const handlePreviewSettlement = async (
-    payload: FinalizeOfficePoolRequest,
-  ): Promise<OfficePoolSettlementPreview | null> => {
-    if (!activePool) return null;
-    try {
-      setIsSaving(true);
-      setError(null);
-      setNotice(null);
-      const nextPreview = await officePoolApi.previewSettlement(activePool.id, payload);
-      setSettlementPreview(nextPreview);
-      setNotice('Settlement preview loaded');
-      return nextPreview;
-    } catch (err: any) {
-      console.error('Failed to preview office pool settlement:', err);
-      setError(err?.response?.data?.message ?? 'Failed to preview settlement');
-      return null;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleFinalizeSettlement = async (
-    payload: FinalizeOfficePoolRequest,
-  ): Promise<boolean> => {
+  // E16b NORMAL finalization, step 1/2: lock the pool on-chain + commit the score
+  // root (idempotent, retryable). Owner-facing.
+  const handleFinalizePrepare = async (): Promise<boolean> => {
     if (!activePool) return false;
     try {
       setIsSaving(true);
       setError(null);
       setNotice(null);
-      await officePoolApi.finalize(activePool.id, payload);
-      const [nextReadiness, nextPool] = await Promise.all([
+      await officePoolApi.finalizePrepare(activePool.id);
+      const [nextReadiness, nextLive] = await Promise.all([
         officePoolApi.getSettlementReadiness(activePool.id).catch(() => null),
+        officePoolApi.getLiveReadiness(activePool.id).catch(() => null),
+      ]);
+      setSettlementReadiness(nextReadiness);
+      setLiveReadiness(nextLive);
+      setNotice('Pool locked — scores committed on-chain');
+      return true;
+    } catch (err: any) {
+      console.error('Failed to prepare office pool finalization:', err);
+      setError(err?.response?.data?.message ?? 'Failed to prepare finalization');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // E16b NORMAL finalization, step 2/2: settle, enabling claims (guarded — requires
+  // prepare first). Owner-facing.
+  const handleFinalizeLive = async (): Promise<boolean> => {
+    if (!activePool) return false;
+    try {
+      setIsSaving(true);
+      setError(null);
+      setNotice(null);
+      await officePoolApi.finalizeLive(activePool.id);
+      const [nextReadiness, nextLive, nextPool] = await Promise.all([
+        officePoolApi.getSettlementReadiness(activePool.id).catch(() => null),
+        officePoolApi.getLiveReadiness(activePool.id).catch(() => null),
         officePoolApi.getById(activePool.id).catch(() => null),
       ]);
       if (nextPool) setActivePool(nextPool);
       setSettlementReadiness(nextReadiness);
-      setSettlementPreview(null);
-      setNotice('Settlement finalized');
+      setLiveReadiness(nextLive);
+      setNotice('Pool finalized — winners can claim');
       refreshHomeInBackground();
       return true;
     } catch (err: any) {
-      console.error('Failed to finalize office pool settlement:', err);
-      setError(err?.response?.data?.message ?? 'Failed to finalize settlement');
+      console.error('Failed to finalize office pool:', err);
+      setError(err?.response?.data?.message ?? 'Failed to finalize pool');
       return false;
     } finally {
       setIsSaving(false);
@@ -858,7 +871,7 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     sidePicks,
     joinContext,
     settlementReadiness,
-    settlementPreview,
+    liveReadiness,
     joinSidePickMap,
     setJoinSidePickMap,
     activeQualifierGroupIndex,
@@ -890,8 +903,8 @@ export function useOfficePoolPageData(worldCupModeConfigMap: Record<OfficePoolMo
     handleSavePicks,
     handleSettlePool,
     handleRefreshSettlementReadiness,
-    handlePreviewSettlement,
-    handleFinalizeSettlement,
+    handleFinalizePrepare,
+    handleFinalizeLive,
     handleClaimSettlement,
     handleShareGroupLink,
   };

@@ -1,12 +1,11 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { tokenUtils } from '../utils/token';
 import { bootstrapAuth } from './auth-bootstrap';
-import { Prediction } from '../types/Prediction';
+import { Prediction, QuoteRequest, QuoteResponse } from '../types/Prediction';
 import { PredictionRecord, CreatePredictionRecordRequest } from '../types/PredictionRecord';
 import { User } from '../types/User';
 import {
   CreateOfficePoolRequest,
-  FinalizeOfficePoolRequest,
   JoinOfficePoolRequest,
   OfficePoolJoinContext,
   OfficePoolJoinResponse,
@@ -14,8 +13,8 @@ import {
   OfficePoolMemberSummary,
   OfficePoolPickOption,
   OfficePoolPredictionSummary,
+  OfficePoolLevelReadiness,
   OfficePoolScopeAccess,
-  OfficePoolSettlementPreview,
   OfficePoolSettlementReadiness,
   OfficePoolSidePickSummary,
   OfficePoolSummary,
@@ -112,6 +111,13 @@ export const predictionApi = {
   getUpcoming: async (): Promise<Prediction[]> => {
     const response = await api.get<Prediction[]>('/predictions');
     return response.data.filter(p => p.status === 'UPCOMING');
+  },
+
+  // M4.2 — chain-true post-slippage quote (LMSR via hub.previewPredict; NAIVE BE-synthesized).
+  // Replaces the local calculateWin in PredictionModal — render `potentialPayout` as "To Win".
+  getQuote: async (predictionId: string, body: QuoteRequest): Promise<QuoteResponse> => {
+    const response = await api.post<QuoteResponse>(`/predictions/${predictionId}/quote`, body);
+    return response.data;
   },
 };
 
@@ -231,13 +237,28 @@ export const officePoolApi = {
     return response.data;
   },
 
-  previewSettlement: async (id: string, data: FinalizeOfficePoolRequest): Promise<OfficePoolSettlementPreview> => {
-    const response = await api.post<OfficePoolSettlementPreview>(`/office-pools/${id}/settlement-preview`, data);
+  // E16b live-pool readiness (E18 scoringStatus): READY ⇒ FINALIZABLE, PARTIAL ⇒ SCORING_PENDING,
+  // settled ⇒ FINALIZED. This is the authoritative gate for the NORMAL finalize two-step — the E16a
+  // /settlement-readiness poolLevel NEVER derives FINALIZABLE for a NORMAL knockout pool (A6).
+  getLiveReadiness: async (id: string): Promise<OfficePoolLevelReadiness> => {
+    const response = await api.get<OfficePoolLevelReadiness>(`/office-pools/${id}/live-readiness`);
     return response.data;
   },
 
-  finalize: async (id: string, data: FinalizeOfficePoolRequest): Promise<unknown> => {
-    const response = await api.post<unknown>(`/office-pools/${id}/finalize`, data);
+  // E16b NORMAL live finalization is two-step (the owner-facing path):
+  // 1) finalize-prepare — lock the pool on-chain + commit the score root (idempotent, retryable)
+  // 2) finalize-live    — settle, enabling claims (guarded: requires prepare first)
+  // The E16a single-shot /finalize + /settlement-preview (NORMAL/VOID_REFUND/GUARDIAN_OVERRIDE)
+  // remain BE-side as the admin/guardian emergency path; they are intentionally not surfaced here.
+  finalizePrepare: async (id: string): Promise<{ poolState?: string; committedRoot?: string }> => {
+    const response = await api.post<{ poolState?: string; committedRoot?: string }>(
+      `/office-pools/${id}/finalize-prepare`,
+    );
+    return response.data;
+  },
+
+  finalizeLive: async (id: string): Promise<unknown> => {
+    const response = await api.post<unknown>(`/office-pools/${id}/finalize-live`);
     return response.data;
   },
 

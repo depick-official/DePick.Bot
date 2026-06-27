@@ -27,3 +27,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.pass
+env.*
+# keep the shared, tracked env files
+!env.prod
+!env.uat

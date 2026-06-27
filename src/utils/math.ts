@@ -1,77 +1,13 @@
-import { SelectedTeam, CurrencyType } from "../types/PredictionRecord";
-
-/**
- * Calculate prediction ratio
- * @param totalAmount Total pool amount
- * @param teamAmount Team predict amount
- * @returns ratio (0.00-1.00)
- */
-export const calculatePredictRatio =
-    (totalAmount: number | null | undefined, teamAmount: number | null | undefined): number => {
-        const safeTotal = Number(totalAmount ?? 0);
-        const safeTeamAmount = Number(teamAmount ?? 0);
-        if (!Number.isFinite(safeTotal) || !Number.isFinite(safeTeamAmount) || safeTotal === 0) return 0;
-        return (safeTeamAmount / safeTotal);
-    };
-
 /**
  * Format large numbers to k format
  * @param num Number to format
  * @returns Formatted string
  */
-export const formatNumber = (num: number | null | undefined): string => {
-    const safeNumber = Number(num ?? 0);
-    if (!Number.isFinite(safeNumber)) return '0';
-    if (safeNumber >= 1000) {
-        return (safeNumber / 1000).toFixed(1) + ' k';
+export const formatNumber = (num: number): string => {
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + ' k';
     }
-    return (safeNumber).toFixed(0);
-};
-
-/**
- * Calculate potential win based on AMM formula
- * @param amount Bet amount
- * @param avgPrice Average price (unused, kept for API consistency)
- * @param _currency Currency type (unused, kept for API consistency)
- * @param selectedTeam Selected team (HOME or AWAY)
- * @param homeTeamPoolToken Home team pool size
- * @param awayTeamPoolToken Away team pool size
- * @returns [potentialWin, odds] Tuple of potential win amount and current odds
- */
-export const calculateWin = (
-    amount: number,
-    _avgPrice: number,  // Unused but kept for API consistency
-    _currency: CurrencyType,  // Unused but kept for API consistency
-    selectedTeam: SelectedTeam,
-    homeTeamPoolToken: number,
-    awayTeamPoolToken: number
-): [string, string] => {
-    const totalPool = homeTeamPoolToken + awayTeamPoolToken;
-
-    // Handle edge case of empty pool
-    if (totalPool === 0) {
-        return [amount.toString(), '1.00'];
-    }
-
-    // Get current pool size for selected team
-    const selectedTeamPool = selectedTeam === SelectedTeam.HOME
-        ? homeTeamPoolToken
-        : awayTeamPoolToken;
-
-    // Calculate current odds/price (before adding the bet)
-    const odds = selectedTeamPool / totalPool;
-
-    // Handle edge case where selected team has no pool
-    if (odds === 0) {
-        return [(amount * 100).toFixed(3), '0.01'];
-    }
-
-    // Potential win = amount / odds
-    const potentialWin = amount / odds;
-
-    console.log("calculateWin: amount=%s, odds=%s, potentialWin=%s", amount, odds.toFixed(3), potentialWin.toFixed(3));
-
-    return [potentialWin.toFixed(3), odds.toFixed(3)];
+    return (num).toFixed(0);
 };
 
 /**

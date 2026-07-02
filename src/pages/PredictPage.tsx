@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { predictionApi } from '../services/api';
 import { Prediction } from '../types/Prediction';
-import { calculatePredictRatio, formatNumber } from '../utils/math';
-import { tokenUtils } from '../utils/token';
+import { formatNumber } from '../utils/math';
 import PredictionModal from '../components/PredictionModal';
 import '../styles/pages.scss';
 
 export default function PredictPage() {
-  const [searchParams] = useSearchParams();
   const { matchId } = useParams<{ matchId?: string }>();
   const navigate = useNavigate();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -18,18 +16,9 @@ export default function PredictPage() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const authToken = searchParams.get('auth_token');
-
-    if (!authToken) {
-      setError('Missing authentication token');
-      setIsLoading(false);
-      return;
-    }
-
-    // Store JWT token for API calls
-    tokenUtils.setToken(authToken, 'TELEGRAM');
-
-    // Fetch predictions or specific match
+    // M7.4.6 — Auth lives in localStorage via App.tsx's bootstrapAuth.
+    // This page no longer reads `?auth_token=` from the URL; the bot mints
+    // URLs without any embedded credential.
     const fetchData = async () => {
       try {
         setIsLoading(true);
@@ -54,7 +43,7 @@ export default function PredictPage() {
     };
 
     fetchData();
-  }, [searchParams, matchId]);
+  }, [matchId]);
 
   const handlePredictClick = (match: Prediction) => {
     setSelectedMatch(match);
@@ -67,8 +56,7 @@ export default function PredictPage() {
 
     // If we're on a specific match page, navigate back to list
     if (matchId) {
-      const authToken = searchParams.get('auth_token');
-      navigate(`/predict?auth_token=${authToken}`);
+      navigate('/predict');
     }
   };
 
@@ -124,15 +112,9 @@ export default function PredictPage() {
       ) : !matchId ? (
         <div className="match-list">
           {predictions.map((match) => {
-            const homeRatio = calculatePredictRatio(
-              match.totalPoolAmountToken,
-              match.homeTeamPoolToken
-            );
-            const awayRatio = calculatePredictRatio(
-              match.totalPoolAmountToken,
-              match.awayTeamPoolToken
-            );
-
+            // M4.3 — odds direct from chain-supplied `homeOdds`/`awayOdds` (fractions [0,1]).
+            // Token Pool from `marketCollateralToken` (= LMSR `getMarketCollateral`, or
+            // NAIVE-derived equivalent). No more pool-ratio math on the FE.
             return (
               <div
                 key={match.id}
@@ -147,7 +129,7 @@ export default function PredictPage() {
                   <div className="team">
                     <img src={match.homeTeam.logo} alt={match.homeTeam.name} />
                     <span>{match.homeTeam.name}</span>
-                    <div className="ratio">{formatNumber(homeRatio * 100)}%</div>
+                    <div className="ratio">{formatNumber(match.homeOdds * 100)}%</div>
                   </div>
 
                   <div className="vs">VS</div>
@@ -155,13 +137,13 @@ export default function PredictPage() {
                   <div className="team">
                     <img src={match.awayTeam.logo} alt={match.awayTeam.name} />
                     <span>{match.awayTeam.name}</span>
-                    <div className="ratio">{formatNumber(awayRatio * 100)}%</div>
+                    <div className="ratio">{formatNumber(match.awayOdds * 100)}%</div>
                   </div>
                 </div>
 
                 <div className="pool-info">
                   <div className="pool-item">
-                    <span>Token Pool: {formatNumber(match.totalPoolAmountToken)}</span>
+                    <span>Token Pool: {formatNumber(match.marketCollateralToken)}</span>
                   </div>
                   <div className="pool-item">
                     <span>Credit Pool: {formatNumber(match.totalPoolAmountCredit)}</span>

@@ -47,6 +47,12 @@ export interface CustomArenaMarket {
   hasUserPosition?: boolean;
   claimStatus?: string | null;
   canClaim?: boolean;
+  liquidityPICK?: number;
+  liquidityCreatorPrincipalPick?: number;
+  liquidityCreatorClaimedPick?: number;
+  claimableCreatorYieldPick?: number;
+  canClaimCreatorYield?: boolean;
+  resolvedOutcome?: number | null;
 }
 
 export interface CustomArenaVoteResponse {

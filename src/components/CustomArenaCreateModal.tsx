@@ -24,6 +24,7 @@ export default function CustomArenaCreateModal({
   const [step, setStep] = useState<CreateStep>('input');
   const [agentResponse, setAgentResponse] = useState<CustomArenaProposalResponse | null>(null);
   const [proposal, setProposal] = useState<CustomArenaProposal | null>(null);
+  const [liquidityPICK, setLiquidityPICK] = useState('500');
   const [error, setError] = useState<string | null>(null);
 
   const canClose = step !== 'creating';
@@ -71,12 +72,17 @@ export default function CustomArenaCreateModal({
 
   const handleCreate = async () => {
     if (!proposal) return;
+    const liquidity = Number(liquidityPICK);
+    if (!Number.isFinite(liquidity) || liquidity < 500) {
+      setError('Minimum creator liquidity is 500 PICK.');
+      return;
+    }
 
     setError(null);
     setStep('creating');
 
     try {
-      const market = await customArenaApi.createMarket(scope, proposal);
+      const market = await customArenaApi.createMarket(scope, proposal, liquidity);
       if (market.status !== 'OPEN') {
         throw new Error(`Market returned ${market.status}`);
       }
@@ -84,8 +90,9 @@ export default function CustomArenaCreateModal({
       onCreated();
     } catch (err) {
       console.error('Failed create custom arena market:', err);
+      await onCreated();
       setStep('review');
-      setError('Failed to deploy market. Please try again.');
+      setError(getCreateErrorMessage(err));
     }
   };
 
@@ -170,12 +177,31 @@ export default function CustomArenaCreateModal({
                     <span>Outcomes</span>
                     <strong>{outcomes.join(', ')}</strong>
                   </div>
-                  <div className="custom-arena-review-row">
-                    <span>Deadline</span>
-                    <strong>{formatDeadline(proposal.resolution_deadline)}</strong>
-                  </div>
-                  <div className="custom-arena-rules">
-                    <span>Resolution rules</span>
+      <div className="custom-arena-review-row">
+        <span>Deadline</span>
+        <strong>{formatDeadline(proposal.resolution_deadline)}</strong>
+      </div>
+      <div className="custom-arena-review-row custom-arena-liquidity-row">
+        <label htmlFor="custom-arena-liquidity">Creator liquidity</label>
+        <div className="custom-arena-liquidity-input">
+          <input
+            id="custom-arena-liquidity"
+            type="number"
+            min={500}
+            step={1}
+            value={liquidityPICK}
+            onChange={(event) => setLiquidityPICK(event.target.value)}
+            disabled={step === 'creating'}
+          />
+          <span>PICK</span>
+        </div>
+      </div>
+      <p className="custom-arena-liquidity-note">
+        500 PICK minimum. You can earn leftover liquidity after settlement,
+        but profit is not guaranteed. Market fees go to DePick.
+      </p>
+      <div className="custom-arena-rules">
+        <span>Resolution rules</span>
                     {rules.length ? (
                       <ul>
                         {rules.map((rule) => (
@@ -187,11 +213,11 @@ export default function CustomArenaCreateModal({
                     )}
                   </div>
             <button
-              type="button"
-              className="confirm-button"
-              onClick={handleCreate}
-              disabled={step === 'creating'}
-            >
+        type="button"
+        className="confirm-button"
+        onClick={handleCreate}
+        disabled={step === 'creating' || Number(liquidityPICK) < 500}
+      >
               {step === 'creating' ? 'Deploying market...' : 'Agree & Create'}
             </button>
                 </div>
@@ -217,4 +243,9 @@ function formatDeadline(value?: string) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function getCreateErrorMessage(err: unknown) {
+  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return message || 'Failed to deploy market. Please try again.';
 }

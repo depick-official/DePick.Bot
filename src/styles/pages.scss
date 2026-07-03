@@ -843,6 +843,10 @@
     .office-pool-meta-grid,
     .office-pool-entry-card {
       grid-template-columns: 1fr;
+    }
+  }
+}
+
 .predict-toolbar {
   display: flex;
   align-items: center;
@@ -1079,7 +1083,8 @@
   }
 }
 
-.custom-arena-outcomes {
+.custom-arena-outcomes,
+.custom-arena-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
@@ -1184,5 +1189,35 @@
       cursor: not-allowed;
       transform: none;
     }
+  }
+}
+
+.custom-arena-creator-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(28, 21, 42, 0.42);
+
+  div {
+    min-width: 0;
+  }
+
+  span {
+    display: block;
+    color: #cac5d6;
+    font-family: 'Poppins', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  strong {
+    display: block;
+    color: #f1eef8;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
   }
 }

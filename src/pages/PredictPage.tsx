@@ -27,6 +27,8 @@ export default function PredictPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCustomLoading, setIsCustomLoading] = useState(false);
   const [busyCustomMarketId, setBusyCustomMarketId] = useState<string | null>(null);
+  const [busyCreatorYieldMarketId, setBusyCreatorYieldMarketId] = useState<string | null>(null);
+  const [expandedCreatorMarketId, setExpandedCreatorMarketId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Prediction | null>(null);
   const [selectedCustomMarket, setSelectedCustomMarket] = useState<CustomArenaMarket | null>(null);
@@ -169,6 +171,20 @@ export default function PredictPage() {
     }
   };
 
+  const handleClaimCreatorYield = async (market: CustomArenaMarket) => {
+    try {
+      setBusyCreatorYieldMarketId(market.id);
+      await customArenaApi.claimCreatorYield(market.id);
+      alert('Creator yield claim submitted.');
+      fetchCustomMarkets();
+    } catch (err) {
+      console.error('Failed claim custom arena creator yield:', err);
+      alert('Creator yield is not available yet.');
+    } finally {
+      setBusyCreatorYieldMarketId(null);
+    }
+  };
+
   const handleCreateClick = () => {
     if (groupScope) setShowCreateModal(true);
   };
@@ -228,7 +244,11 @@ export default function PredictPage() {
     );
   };
 
-  const renderCustomList = (markets: CustomArenaMarket[], emptyText: string) => {
+  const renderCustomList = (
+    markets: CustomArenaMarket[],
+    emptyText: string,
+    options?: { creatorDetails?: boolean },
+  ) => {
     if (isCustomLoading) return <div className="loading">Loading markets...</div>;
 
     if (markets.length === 0) {
@@ -246,9 +266,20 @@ export default function PredictPage() {
             key={market.id}
             market={market}
             isBusy={busyCustomMarketId === market.id}
+            showCreatorDetails={options?.creatorDetails && expandedCreatorMarketId === market.id}
+            isCreatorYieldBusy={busyCreatorYieldMarketId === market.id}
             onVote={handleCustomVote}
             onPredict={handleCustomPredict}
             onClaim={handleCustomClaim}
+            onToggleDetails={
+              options?.creatorDetails
+                ? () =>
+                    setExpandedCreatorMarketId((current) =>
+                      current === market.id ? null : market.id,
+                    )
+                : undefined
+            }
+            onClaimCreatorYield={options?.creatorDetails ? handleClaimCreatorYield : undefined}
           />
         ))}
       </div>
@@ -317,8 +348,10 @@ export default function PredictPage() {
             (groupScope
               ? renderCustomList(groupMarkets, 'No group markets yet.')
               : renderCustomList([], 'Open from a group to unlock Custom Arena.'))}
-          {activeTab === 'created' &&
-            renderCustomList(createdMarkets, 'No created markets yet.')}
+              {activeTab === 'created' &&
+                renderCustomList(createdMarkets, 'No created markets yet.', {
+                  creatorDetails: true,
+                })}
         </>
       )}
 

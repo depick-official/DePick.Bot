@@ -19,6 +19,14 @@ import {
   OfficePoolSidePickSummary,
   OfficePoolSummary,
 } from '../types/OfficePool';
+import {
+  CustomArenaMarket,
+  CustomArenaProposal,
+  CustomArenaProposalResponse,
+  CustomArenaScope,
+  CustomArenaVoteResponse,
+  CustomArenaVoteValue,
+} from '../types/CustomArena';
 
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
@@ -207,6 +215,88 @@ export const predictionApi = {
   // used to compute locally. Replaces `calculateWin` in PredictionModal.
   getQuote: async (predictionId: string, body: QuoteRequest): Promise<QuoteResponse> => {
     const response = await api.post<QuoteResponse>(`/predictions/${predictionId}/quote`, body);
+    return response.data;
+  },
+};
+
+export const customArenaApi = {
+  createProposal: async (
+    topic: string,
+    scope?: CustomArenaScope,
+  ): Promise<CustomArenaProposalResponse> => {
+    const response = await api.post<CustomArenaProposalResponse>('/custom-arena/proposals', {
+      topic,
+      scope,
+    }, {
+      timeout: 90000,
+    });
+    return response.data;
+  },
+  createMarket: async (
+    scope: CustomArenaScope,
+    proposal: CustomArenaProposal,
+    liquidityPICK: number,
+  ): Promise<CustomArenaMarket> => {
+    const response = await api.post<CustomArenaMarket>('/custom-arena/markets', {
+      scope,
+      proposal: { success: true, status: 'created', proposal },
+      liquidityPICK,
+    }, {
+      timeout: 90000,
+    });
+    return response.data;
+  },
+  getGroupMarkets: async (scope: CustomArenaScope): Promise<CustomArenaMarket[]> => {
+    const response = await api.get<CustomArenaMarket[]>('/custom-arena/markets', {
+      params: {
+        scopeProvider: scope.scopeProvider,
+        scopeExternalId: scope.scopeExternalId,
+      },
+    });
+    return response.data;
+  },
+  getCreatedMarkets: async (): Promise<CustomArenaMarket[]> => {
+    const response = await api.get<CustomArenaMarket[]>('/custom-arena/markets/created');
+    return response.data;
+  },
+  voteMarket: async (
+    id: string,
+    value: CustomArenaVoteValue,
+  ): Promise<CustomArenaVoteResponse> => {
+    const response = await api.post<CustomArenaVoteResponse>(`/custom-arena/markets/${id}/vote`, {
+      value,
+    });
+    return response.data;
+  },
+  predictMarket: async (
+    id: string,
+    option: 0 | 1,
+    amountPick: number,
+  ): Promise<{ txHash: string }> => {
+    const response = await api.post<{ txHash: string }>(`/custom-arena/markets/${id}/predict`, {
+      option,
+      amountPick,
+    }, {
+      timeout: 90000,
+    });
+    return response.data;
+  },
+  claimMarket: async (id: string): Promise<{ txHash: string; paidRaw: string }> => {
+    const response = await api.post<{ txHash: string; paidRaw: string }>(
+      `/custom-arena/markets/${id}/claim`,
+      undefined,
+      { timeout: 90000 },
+    );
+    return response.data;
+  },
+  claimCreatorYield: async (
+    id: string,
+  ): Promise<{ marketId: string; txHash: string; paidRaw: string; paidPick: number }> => {
+    const response = await api.post<{ marketId: string; txHash: string; paidRaw: string; paidPick: number }>(
+      `/custom-arena/markets/${id}/creator-yield/claim`,
+      undefined,
+      { timeout: 90000 },
+    );
     return response.data;
   },
 };

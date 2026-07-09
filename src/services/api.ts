@@ -28,6 +28,21 @@ import {
   CustomArenaVoteValue,
 } from '../types/CustomArena';
 
+export interface LeaderboardUserRanking {
+  id: string;
+  username: string;
+  avatar: string | null;
+  tokenBalance?: number;
+  winRate?: number;
+  referralCount?: number;
+}
+
+export interface LeaderboardResponse {
+  creditRanking: LeaderboardUserRanking[];
+  winRateRanking: LeaderboardUserRanking[];
+  referralRanking: LeaderboardUserRanking[];
+}
+
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
 // `ngrok-skip-browser-warning` short-circuits the ngrok-free interstitial that
@@ -297,6 +312,15 @@ export const customArenaApi = {
       undefined,
       { timeout: 90000 },
     );
+    return response.data;
+  },
+};
+
+export const leaderboardApi = {
+  getTopUsers: async (provider?: string): Promise<LeaderboardResponse> => {
+    const response = await api.get<LeaderboardResponse>('/leaderboard', {
+      params: provider ? { provider } : undefined,
+    });
     return response.data;
   },
 };

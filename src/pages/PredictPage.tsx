@@ -189,6 +189,10 @@ export default function PredictPage() {
     if (groupScope) setShowCreateModal(true);
   };
 
+  const handleLeaderboardClick = () => {
+    navigate('/leaderboard?provider=TELEGRAM');
+  };
+
   const handleCreated = async () => {
     await fetchCustomMarkets();
     setActiveTab('created');
@@ -298,8 +302,17 @@ export default function PredictPage() {
       ) : (
         <>
           {!matchId && (
-            <div className="predict-toolbar">
-              <div className="predict-tabs" role="tablist" aria-label="Prediction tabs">
+            <>
+              <button
+                type="button"
+                className="predict-leaderboard-cta"
+                onClick={handleLeaderboardClick}
+              >
+                View Telegram Leaderboard
+              </button>
+
+              <div className="predict-toolbar">
+                <div className="predict-tabs" role="tablist" aria-label="Prediction tabs">
                 <button
                   type="button"
                   className={activeTab === 'public' ? 'active' : ''}
@@ -320,10 +333,10 @@ export default function PredictPage() {
                   onClick={() => setActiveTab('created')}
                 >
                   Created
-                </button>
-              </div>
+              </button>
+            </div>
 
-              <div className="custom-arena-create-wrap">
+            <div className="custom-arena-create-wrap">
                 <button
                   type="button"
                   className="custom-arena-create"
@@ -340,7 +353,8 @@ export default function PredictPage() {
                   </span>
                 )}
               </div>
-            </div>
+              </div>
+            </>
           )}
 
           {activeTab === 'public' && renderPublic()}

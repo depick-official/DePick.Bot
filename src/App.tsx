@@ -4,6 +4,7 @@ import PredictPage from './pages/PredictPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
 import OfficePoolPage from './pages/OfficePoolPage';
+import LeaderboardPage from './pages/LeaderboardPage';
 import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
 
 type AuthState =
@@ -70,6 +71,7 @@ function App() {
       <Route path="/mini-game" element={<MiniGamePage />} />
       <Route path="/deposit" element={<DepositPage />} />
       <Route path="/office-pool" element={<OfficePoolPage />} />
+      <Route path="/leaderboard" element={<LeaderboardPage />} />
     </Routes>
   );
 }

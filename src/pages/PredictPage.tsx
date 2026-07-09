@@ -308,7 +308,7 @@ export default function PredictPage() {
                 className="predict-leaderboard-cta"
                 onClick={handleLeaderboardClick}
               >
-                View Telegram Leaderboard
+                View Leaderboard
               </button>
 
               <div className="predict-toolbar">

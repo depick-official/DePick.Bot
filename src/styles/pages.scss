@@ -1072,6 +1072,19 @@
     background: rgba(255, 167, 49, 0.16);
     color: #ffc45b;
   }
+
+  // CA-ARCH-004 (R6) — DISPUTED / On Hold: amber-hold, visually distinct from open.
+  &.status-onhold {
+    background: rgba(255, 196, 0, 0.18);
+    color: #ffd54a;
+  }
+}
+
+// On-hold notice button — non-interactive; signals manual review pending, no trade/claim.
+.custom-arena-hold-notice {
+  background: rgba(255, 196, 0, 0.12);
+  color: #ffd54a;
+  cursor: default;
 }
 
 .custom-arena-question {

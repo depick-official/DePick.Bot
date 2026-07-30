@@ -226,7 +226,13 @@ export default function PredictPage() {
                 <span>{match.homeTeam.name}</span>
                 <div className="ratio">{formatNumber(match.homeOdds * 100)}%</div>
               </div>
-              <div className="vs">VS</div>
+              <div className="vs">
+                VS
+                {/* 3-way (home/draw/away) markets carry a tieOdds; 2-way markets have 0/undefined. */}
+                {match.tieOdds != null && match.tieOdds > 0 && (
+                  <div className="ratio draw-odds">Draw {formatNumber(match.tieOdds * 100)}%</div>
+                )}
+              </div>
               <div className="team">
                 <img src={match.awayTeam.logo} alt={match.awayTeam.name} />
                 <span>{match.awayTeam.name}</span>

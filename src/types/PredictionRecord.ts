@@ -11,7 +11,8 @@ export enum CurrencyType {
 
 export enum SelectedTeam {
   HOME = 'HOME',
-  AWAY = 'AWAY'
+  AWAY = 'AWAY',
+  TIE = 'TIE'   // draw — 3-way markets only; on-chain option 2 (matches BE Prisma SelectedTeam)
 };
 
 

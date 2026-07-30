@@ -40,7 +40,7 @@ export interface Prediction {
 // ── M4.2 quote endpoint ─────────────────────────────────────────────────────
 
 export interface QuoteRequest {
-    selectedTeam: 'HOME' | 'AWAY';
+    selectedTeam: 'HOME' | 'AWAY' | 'TIE';   // TIE = draw (3-way markets); BE quotes option 2
     amount: number; // PICK, > 0
 }
 

@@ -213,6 +213,20 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
               <span className="odds">{formatNumber(match.awayOdds * 100)}%</span>
             </button>
 
+            {/* Draw — 3-way (home/draw/away) markets only; 2-way markets have tieOdds 0/undefined. */}
+            {match.tieOdds != null && match.tieOdds > 0 && (
+              <button
+                onClick={() => handleTeamSelect(SelectedTeam.TIE)}
+                className="team-button"
+              >
+                <div className="team-info">
+                  <span className="draw-icon" aria-hidden>🤝</span>
+                  <span>Draw</span>
+                </div>
+                <span className="odds">{formatNumber(match.tieOdds * 100)}%</span>
+              </button>
+            )}
+
             <button onClick={onClose} className="cancel-button">
               Cancel
             </button>
@@ -222,8 +236,11 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
     );
   }
 
-  // Amount input modal (after team selected)
-  const selectedTeamInfo = selectedTeam === SelectedTeam.HOME ? match.homeTeam : match.awayTeam;
+  // Amount input modal (after team selected). TIE has no team — render a "Draw" label, no logo.
+  const selectedTeamInfo =
+    selectedTeam === SelectedTeam.HOME ? match.homeTeam
+    : selectedTeam === SelectedTeam.AWAY ? match.awayTeam
+    : { name: 'Draw', logo: '' };
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -235,7 +252,9 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
         <div className="modal-body">
           {/* Match Info */}
           <div className="match-section">
-            <img src={selectedTeamInfo.logo} alt={selectedTeamInfo.name} className="team-logo" />
+            {selectedTeamInfo.logo
+              ? <img src={selectedTeamInfo.logo} alt={selectedTeamInfo.name} className="team-logo" />
+              : <div className="team-logo" aria-hidden>🤝</div>}
             <div>
               <p className="vs-title">{match.homeTeam.name} vs {match.awayTeam.name}</p>
               <p className="chosen-team">{selectedTeamInfo.name}</p>

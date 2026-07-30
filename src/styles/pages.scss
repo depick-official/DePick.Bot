@@ -156,6 +156,22 @@
     color: #cac5d6;
     min-width: 24px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+
+    // "Draw N%" for 3-way markets — matches the team .ratio gradient (which is
+    // scoped to .team, so it doesn't reach here).
+    .draw-odds {
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: linear-gradient(180deg, #ffd24a -39.47%, #ffad35 115.79%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
   }
 }
 

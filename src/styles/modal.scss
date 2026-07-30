@@ -158,6 +158,18 @@
       object-fit: contain;
     }
 
+    // Draw option has no team logo — the 🤝 glyph occupies the same 44×44 slot so
+    // the "Draw" label lines up with the team names above/below.
+    .draw-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
     span {
       font-family: 'Montserrat', sans-serif;
       font-size: 15px;
@@ -191,6 +203,12 @@
     height: 44px;
     object-fit: contain;
     flex-shrink: 0;
+    // Center the Draw 🤝 placeholder (a div.team-logo when there's no team logo);
+    // harmless / no-op for the <img> case.
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
   }
 
   .vs-title {

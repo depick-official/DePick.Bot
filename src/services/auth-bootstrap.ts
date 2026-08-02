@@ -23,7 +23,10 @@ interface WebappAuthResponse {
   expiresAt: number;
 }
 
-export type MiniAppAuthProvider = Extract<LoginProvider, 'TELEGRAM' | 'MESSENGER'>;
+export type MiniAppAuthProvider = Extract<
+  LoginProvider,
+  'TELEGRAM' | 'MESSENGER' | 'DISCORD'
+>;
 
 let bootstrapPromise: Promise<string> | null = null;
 
@@ -44,12 +47,18 @@ export function detectBootstrapProvider(): MiniAppAuthProvider | null {
   }
 
   const params = new URLSearchParams(window.location.search);
-  if (params.get('provider')?.toUpperCase() === 'MESSENGER') {
+  const urlProvider = params.get('provider')?.toUpperCase();
+  if (urlProvider === 'MESSENGER') {
     return 'MESSENGER';
+  }
+  if (urlProvider === 'DISCORD') {
+    return 'DISCORD';
   }
 
   const { loginProvider } = tokenUtils.getTokenData();
-  return loginProvider === 'MESSENGER' ? 'MESSENGER' : null;
+  if (loginProvider === 'MESSENGER') return 'MESSENGER';
+  if (loginProvider === 'DISCORD') return 'DISCORD';
+  return null;
 }
 
 /**
@@ -100,12 +109,36 @@ async function bootstrapAuthOnce(): Promise<string> {
     return response.data.token;
   }
 
+  if (provider === 'DISCORD' && exchangeToken) {
+    const response = await axios.post<WebappAuthResponse>(
+      `${baseURL}/auth/discord/exchange`,
+      { exchangeToken },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        timeout: 15000,
+      },
+    );
+
+    tokenUtils.setToken(response.data.token, 'DISCORD');
+    cleanupLaunchParams();
+    return response.data.token;
+  }
+
   const { token, loginProvider } = tokenUtils.getTokenData();
-  if (loginProvider === 'MESSENGER' && token && tokenUtils.isTokenValid()) {
+  if (
+    (loginProvider === 'MESSENGER' || loginProvider === 'DISCORD') &&
+    token &&
+    tokenUtils.isTokenValid()
+  ) {
     return token;
   }
 
-  throw new Error('Missing Messenger exchange token or Telegram WebApp initData');
+  throw new Error(
+    'Missing Discord/Messenger exchange token or Telegram WebApp initData',
+  );
 }
 
 export function bootstrapAuth(): Promise<string> {

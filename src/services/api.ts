@@ -90,7 +90,8 @@ api.interceptors.response.use(
     const isBootstrap =
       typeof original?.url === 'string' &&
       (original.url.includes('/auth/telegram/webapp') ||
-        original.url.includes('/messenger/exchange'));
+        original.url.includes('/messenger/exchange') ||
+        original.url.includes('/auth/discord/exchange'));
     if (status !== 401 || !original || original._retried || isBootstrap) {
       if (status === 401) {
         tokenUtils.removeToken();

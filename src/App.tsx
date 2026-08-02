@@ -35,13 +35,19 @@ function App() {
         }
         console.error('[auth-bootstrap]', err);
         const launchProvider = detectBootstrapProvider();
+        const reopenLabel =
+          launchProvider === 'MESSENGER'
+            ? 'Messenger'
+            : launchProvider === 'DISCORD'
+              ? 'Discord'
+              : null;
         const message =
           err?.response?.status === 404
-            ? launchProvider === 'MESSENGER'
-              ? 'Could not open this Messenger session. Please reopen the Mini App from Messenger.'
+            ? reopenLabel
+              ? `Could not open this ${reopenLabel} session. Please reopen the Mini App from ${reopenLabel}.`
               : 'Your Telegram account is not registered with DePick yet — please /start the bot first.'
-            : launchProvider === 'MESSENGER'
-              ? 'Could not authenticate. Please reopen this from Messenger.'
+            : reopenLabel
+              ? `Could not authenticate. Please reopen this from ${reopenLabel}.`
               : 'Could not authenticate. Please open this from Telegram.';
         setAuth({ status: 'error', message });
       });

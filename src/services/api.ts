@@ -261,11 +261,15 @@ export const customArenaApi = {
     });
     return response.data;
   },
-  getGroupMarkets: async (scope: CustomArenaScope): Promise<CustomArenaMarket[]> => {
+  getGroupMarkets: async (
+    scope: CustomArenaScope,
+    view: 'active' | 'history' = 'active',
+  ): Promise<CustomArenaMarket[]> => {
     const response = await api.get<CustomArenaMarket[]>('/custom-arena/markets', {
       params: {
         scopeProvider: scope.scopeProvider,
         scopeExternalId: scope.scopeExternalId,
+        view,
       },
     });
     return response.data;

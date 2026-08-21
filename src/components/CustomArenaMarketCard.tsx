@@ -28,9 +28,12 @@ export default function CustomArenaMarketCard({
   const noOdds = market.odds?.[1];
   const hasOdds = typeof yesOdds === 'number' && typeof noOdds === 'number';
   const isOpen = market.status === 'OPEN';
+  // CA-ARCH-004 (R6) — a DISPUTED market is On Hold pending manual review: no trade, no
+  // claim, and it must NOT read as a final/closed state (FRD "users see a clear hold state").
+  const isOnHold = market.status === 'DISPUTED';
   const isClaimable = market.status === 'RESOLVED' || market.status === 'VOID';
   const hasClaimed = market.claimStatus === 'CONFIRMED';
-  const canPredict = isOpen && hasOdds;
+  const canPredict = isOpen && hasOdds && !isOnHold;
   const canClaim = isClaimable && market.canClaim && !hasClaimed;
   const disabledLabel = !isOpen ? 'Market Closed' : !hasOdds ? 'Odds Loading' : 'Make Prediction';
   const liquidityProvided = market.liquidityPICK ?? market.liquidityCreatorPrincipalPick;
@@ -70,8 +73,16 @@ export default function CustomArenaMarketCard({
               <span className="custom-arena-arrow" aria-hidden="true">↓</span>
             </button>
           </div>
-          <span className={isOpen ? 'custom-arena-status status-open' : 'custom-arena-status'}>
-            {market.status}
+          <span
+            className={
+              isOnHold
+                ? 'custom-arena-status status-onhold'
+                : isOpen
+                  ? 'custom-arena-status status-open'
+                  : 'custom-arena-status'
+            }
+          >
+            {isOnHold ? 'On Hold' : market.status}
           </span>
           {market.groupLabel && <span>{market.groupLabel}</span>}
           {market.createdByMe && <span>Created by you</span>}
@@ -113,7 +124,11 @@ export default function CustomArenaMarketCard({
       </div>
 
       <div className="custom-arena-actions">
-        {isClaimable ? (
+        {isOnHold ? (
+          <button type="button" className="custom-arena-hold-notice" disabled>
+            On Hold — manual review pending
+          </button>
+        ) : isClaimable ? (
           <button type="button" disabled={!canClaim || isBusy} onClick={() => onClaim(market)}>
             {hasClaimed ? 'Claimed' : isBusy ? 'Claiming...' : 'Claim'}
           </button>

@@ -68,7 +68,13 @@ export default function CustomArenaPredictionModal({
       onPredictionSuccess?.();
     } catch (error) {
       console.error('Failed create custom arena prediction:', error);
-      alert('Failed place prediction. Please try again.');
+      // Surface the backend's reason (e.g. "Prediction exceeds this market's stake cap")
+      // from the 400 body instead of a generic message. NestJS `message` may be a string
+      // or (for validation errors) a string[]; fall back to the generic text.
+      const apiMessage = (error as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      const detail = Array.isArray(apiMessage) ? apiMessage.join(', ') : apiMessage;
+      alert(detail || 'Failed place prediction. Please try again.');
     } finally {
       setIsLoading(false);
     }

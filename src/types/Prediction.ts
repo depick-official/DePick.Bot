@@ -23,12 +23,13 @@ export interface Prediction {
     homeTeamPoolCredit: number;
     awayTeamPoolCredit: number;
     // ── M4.1 chain-native fields (the BE serves these; the FE renders odds/depth from them) ──
-    homeOdds: number;                 // [0,1], sum-to-1 with awayOdds
+    homeOdds: number;                 // [0,1]; sums to 1 with awayOdds (+ tieOdds for 3-way)
     awayOdds: number;
+    tieOdds?: number;                 // 3-way (home/draw/away) markets only; 0/undefined for 2-way
     marketId: number | null;          // null for NAIVE
     marketContractAddress: string;
     marketCollateralToken: number;    // PICK; chain-native pool DEPTH (use this for "Token Pool")
-    marketVolumeToken: { home: number; away: number; total: number };
+    marketVolumeToken: { home: number; away: number; tie?: number; total: number };
     tournament?: string;
     status: PredictionGameStatus | string;
     result?: PredictionGameResult | string;
@@ -39,7 +40,7 @@ export interface Prediction {
 // ── M4.2 quote endpoint ─────────────────────────────────────────────────────
 
 export interface QuoteRequest {
-    selectedTeam: 'HOME' | 'AWAY';
+    selectedTeam: 'HOME' | 'AWAY' | 'TIE';   // TIE = draw (3-way markets); BE quotes option 2
     amount: number; // PICK, > 0
 }
 

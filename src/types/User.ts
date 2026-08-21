@@ -1,7 +1,7 @@
 import { CurrencyType } from "./PredictionRecord";
 import { Team } from "./Team";
 
-export type LoginProvider = 'METAMASK' | 'GOOGLE' |  'OKX' | 'BITGET' | 'TELEGRAM' | 'MESSENGER' | 'LINE' |'KAIAWALLET' | 'undefined';
+export type LoginProvider = 'METAMASK' | 'GOOGLE' |  'OKX' | 'BITGET' | 'TELEGRAM' | 'MESSENGER' | 'DISCORD' | 'LINE' |'KAIAWALLET' | 'undefined';
 
 export enum LoginProviderEnum {
     LINE = 'LINE',

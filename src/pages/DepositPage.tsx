@@ -6,6 +6,7 @@ import {
   DepositQuote,
 } from '../services/api';
 import { fromRaw, toRaw } from '../utils/decimals';
+import { detectBootstrapProvider } from '../services/auth-bootstrap';
 import '../styles/pages.scss';
 
 /**
@@ -100,15 +101,26 @@ export default function DepositPage() {
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      await depositApi.createSession(
+      const session = await depositApi.createSession(
         chainSpec.key,
         tokenSpec.address,
         rawAmount.toString(),
       );
-      // The BE has posted a fresh bot DM with a `web_app` button to the
-      // sign-app — that's the only way to hand off to another Mini App
-      // without losing Telegram.WebApp.initData. We can't navigate from
-      // here; show a "check chat" confirmation instead.
+      // Hand-off to the sign-app differs by channel (Step C / D2):
+      //   - Discord: this Mini App is a real browser tab (no Telegram initData to
+      //     preserve), and a bot DM can't be relied on (a user with DMs disabled
+      //     hits Discord error 50007 and would dead-end). So navigate the tab
+      //     straight to the sign-app. `session.signingUrl` already carries
+      //     `provider=discord&exchange=<single-use token>`; the sign-app redeems
+      //     it for a Bearer JWT. A top-level navigation is not CORS-governed, and
+      //     the sign-app is served same-origin under the BE's /sign.
+      //   - Telegram: the BE posted a `web_app`-button DM (the only hand-off that
+      //     preserves initData across Mini Apps); we can't navigate from here, so
+      //     show a "check your chat" confirmation.
+      if (detectBootstrapProvider() === 'DISCORD') {
+        window.location.href = session.signingUrl;
+        return;
+      }
       setSubmitDone(true);
     } catch (err: any) {
       console.error('[deposit] session create failed', err);

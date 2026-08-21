@@ -28,6 +28,21 @@ import {
   CustomArenaVoteValue,
 } from '../types/CustomArena';
 
+export interface LeaderboardUserRanking {
+  id: string;
+  username: string;
+  avatar: string | null;
+  tokenBalance?: number;
+  winRate?: number;
+  referralCount?: number;
+}
+
+export interface LeaderboardResponse {
+  creditRanking: LeaderboardUserRanking[];
+  winRateRanking: LeaderboardUserRanking[];
+  referralRanking: LeaderboardUserRanking[];
+}
+
 // Create axios instance
 // When served from backend at /bot/, use same origin for API calls (no CORS issues!)
 // `ngrok-skip-browser-warning` short-circuits the ngrok-free interstitial that
@@ -75,7 +90,8 @@ api.interceptors.response.use(
     const isBootstrap =
       typeof original?.url === 'string' &&
       (original.url.includes('/auth/telegram/webapp') ||
-        original.url.includes('/messenger/exchange'));
+        original.url.includes('/messenger/exchange') ||
+        original.url.includes('/auth/discord/exchange'));
     if (status !== 401 || !original || original._retried || isBootstrap) {
       if (status === 401) {
         tokenUtils.removeToken();
@@ -246,11 +262,15 @@ export const customArenaApi = {
     });
     return response.data;
   },
-  getGroupMarkets: async (scope: CustomArenaScope): Promise<CustomArenaMarket[]> => {
+  getGroupMarkets: async (
+    scope: CustomArenaScope,
+    view: 'active' | 'history' = 'active',
+  ): Promise<CustomArenaMarket[]> => {
     const response = await api.get<CustomArenaMarket[]>('/custom-arena/markets', {
       params: {
         scopeProvider: scope.scopeProvider,
         scopeExternalId: scope.scopeExternalId,
+        view,
       },
     });
     return response.data;
@@ -297,6 +317,15 @@ export const customArenaApi = {
       undefined,
       { timeout: 90000 },
     );
+    return response.data;
+  },
+};
+
+export const leaderboardApi = {
+  getTopUsers: async (provider?: string): Promise<LeaderboardResponse> => {
+    const response = await api.get<LeaderboardResponse>('/leaderboard', {
+      params: provider ? { provider } : undefined,
+    });
     return response.data;
   },
 };

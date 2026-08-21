@@ -42,6 +42,9 @@ export interface CustomArenaMarket {
   userVote: CustomArenaVoteValue;
   createdByMe: boolean;
   groupLabel?: string | null;
+  // CA-ARCH-004 (R6) — status === 'DISPUTED' drives the On-Hold UI; disputeState
+  // (NONE/HELD/CLEARED) is the finer on-chain hold signal surfaced by the BE.
+  disputeState?: string;
   odds?: number[];
   collateralPick?: number;
   hasUserPosition?: boolean;

@@ -1,0 +1,27 @@
+/* Welcome modal — first sign-in only.
+ *
+ * Layout only: the sheet, header gradient and button already come from
+ * modal.scss, so this file exists purely to set the copy centred and legible
+ * rather than to restyle anything. Keeping it separate means a change to the
+ * shared modal look still carries here. */
+
+.welcome-body {
+  text-align: center;
+
+  .welcome-lead {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: #fafafa;
+    margin: 0 0 12px;
+  }
+
+  .welcome-note {
+    font-family: 'Poppins', sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: rgba(250, 250, 250, 0.7);
+    margin: 0 0 24px;
+  }
+}

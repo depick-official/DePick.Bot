@@ -7,6 +7,7 @@ import BuyPickQrPage from './pages/BuyPickQrPage';
 import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
+import ModeratorPortalPage from './pages/ModeratorPortalPage';
 import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
 
 type AuthState =
@@ -80,6 +81,7 @@ function App() {
       <Route path="/mini-game" element={<MiniGamePage />} />
       <Route path="/deposit" element={<DepositPage />} />
       <Route path="/buypick" element={<BuyPickQrPage />} />
+      <Route path="/dashboard" element={<ModeratorPortalPage />} />
       <Route path="/office-pool" element={<OfficePoolPage />} />
       <Route path="/leaderboard" element={<LeaderboardPage />} />
     </Routes>

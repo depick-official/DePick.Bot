@@ -482,3 +482,68 @@ export const officePoolApi = {
     return response.data;
   },
 };
+
+// ── Franchise reporting (moderator dashboard, /dashboard command) ────────────
+
+export interface ModeratorCommunity {
+  id: string;
+  scopeProvider: 'TELEGRAM' | 'DISCORD';
+  displayName: string | null;
+  feeBps: number;
+}
+export interface PredictionsSummary {
+  rows: Array<{
+    result: 'WIN' | 'LOSE' | 'TIE' | 'ON_GOING';
+    count: number; volume: number;
+    claimableCredit: number; claimableToken: number;
+    claimedCredit: number; claimedToken: number;
+    unclaimedCredit: number; unclaimedToken: number;
+  }>;
+  totals: Omit<PredictionsSummary['rows'][number], 'result'>;
+  eligibility: { payableVolume: number; provisionalVolume: number };
+  commission: null | { feeBps: number; payableCommission: number; estimatedCommission: number; note: string };
+}
+export interface PickSummary {
+  buyPick: { count: number; usdcInRaw: string; pickIssuedRaw: string };
+  sellPick: { count: number; usdcOutRaw: string; pickReclaimedRaw: string };
+  grantRisk: {
+    promotionalPickReceived: number; promotionalPickUsdcEquiv: number;
+    claimedPickWinnings: number; netPlatformFundedValueExtractedRaw: string;
+    valuation: { pickPerUsd: number; source: string; at: string };
+  };
+  winnings: { claimedToken: number; claimableToken: number; claimableCredit: number };
+}
+export interface ReportRows<T> { items: T[]; total: number; limit: number; offset: number }
+
+type ReportParams = Record<string, string | number | undefined>;
+
+export const reportingApi = {
+  communities: async (): Promise<ModeratorCommunity[]> => {
+    const r = await api.get<ModeratorCommunity[]>('/moderator/reports/communities');
+    return r.data;
+  },
+  predictionsSummary: async (params: ReportParams): Promise<PredictionsSummary> => {
+    const r = await api.get<PredictionsSummary>('/moderator/reports/predictions/summary', { params });
+    return r.data;
+  },
+  predictions: async (params: ReportParams): Promise<ReportRows<any>> => {
+    const r = await api.get<ReportRows<any>>('/moderator/reports/predictions', { params });
+    return r.data;
+  },
+  pickSummary: async (params: ReportParams): Promise<PickSummary> => {
+    const r = await api.get<PickSummary>('/moderator/reports/pick-transactions/summary', { params });
+    return r.data;
+  },
+  pick: async (params: ReportParams): Promise<ReportRows<any>> => {
+    const r = await api.get<ReportRows<any>>('/moderator/reports/pick-transactions', { params });
+    return r.data;
+  },
+  userSummary: async (id: string): Promise<any> => {
+    const r = await api.get<any>(`/moderator/reports/user/${id}`);
+    return r.data;
+  },
+  exportCsv: async (params: ReportParams): Promise<string> => {
+    const r = await api.get<string>('/moderator/reports/export', { params, responseType: 'text' });
+    return r.data;
+  },
+};

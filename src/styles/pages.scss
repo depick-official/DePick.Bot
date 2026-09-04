@@ -923,20 +923,6 @@
   }
 }
 
-.custom-arena-create-wrap {
-  position: fixed;
-  right: calc(16px + env(safe-area-inset-right));
-  bottom: calc(18px + env(safe-area-inset-bottom));
-  z-index: 20;
-
-  &:hover .custom-arena-tooltip,
-  &:focus-within .custom-arena-tooltip {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-  }
-}
-
 .custom-arena-create {
   display: inline-flex;
   align-items: center;
@@ -960,35 +946,183 @@
   }
 }
 
-.lock-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  font-size: 10px;
-  font-weight: 800;
-}
+.custom-arena-dashboard {
+  .custom-arena-dashboard-panel {
+    margin-bottom: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    background: linear-gradient(to top, rgba(28, 21, 42, 0.9), #3b2765);
+  }
 
-.custom-arena-tooltip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  z-index: 10;
-  width: 190px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #1c152a;
-  border: 1px solid rgba(78, 57, 120, 0.9);
-  color: #f1eef8;
-  font-family: 'Poppins', sans-serif;
-  font-size: 11px;
-  line-height: 1.35;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(2px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  .custom-arena-dashboard-context {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .custom-arena-dashboard-selector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    label {
+      color: #cac5d6;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    strong,
+    select {
+      min-width: 0;
+      color: #f1eef8;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    select {
+      max-width: 62%;
+      padding: 8px 10px;
+      border: 1px solid rgba(78, 57, 120, 0.9);
+      border-radius: 8px;
+      background: rgba(28, 21, 42, 0.8);
+      text-align: right;
+    }
+  }
+
+  .custom-arena-dashboard-context-note {
+    color: #cac5d6;
+    font-family: 'Poppins', sans-serif;
+    font-size: 11px;
+  }
+
+  .custom-arena-dashboard-create {
+    width: 100%;
+    height: auto;
+    min-height: 42px;
+    margin-top: 2px;
+  }
+
+  .custom-arena-dashboard-panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+
+    h2 {
+      margin: 0;
+      color: #f1eef8;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    p,
+    > span {
+      margin-top: 3px;
+      color: #cac5d6;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+    }
+  }
+
+  .custom-arena-dashboard-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .custom-arena-dashboard-stat {
+    min-width: 0;
+    padding: 10px;
+    border-radius: 9px;
+    background: rgba(28, 21, 42, 0.42);
+
+    span,
+    small {
+      display: block;
+      color: #cac5d6;
+      font-family: 'Poppins', sans-serif;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    strong {
+      display: block;
+      margin: 3px 0;
+      color: #ffd44b;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .custom-arena-dashboard-counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+
+    button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid rgba(78, 57, 120, 0.75);
+      border-radius: 8px;
+      background: rgba(28, 21, 42, 0.42);
+      color: #cac5d6;
+      font-family: 'Poppins', sans-serif;
+      font-size: 10px;
+      text-align: left;
+
+      &.active {
+        border-color: rgba(255, 167, 49, 0.7);
+        background: rgba(255, 167, 49, 0.15);
+        color: #ffd44b;
+      }
+
+      strong {
+        color: #f1eef8;
+        font-family: 'Montserrat', sans-serif;
+        font-size: 11px;
+      }
+    }
+  }
+
+  .custom-arena-dashboard-error {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 113, 113, 0.3);
+    border-radius: 10px;
+    background: rgba(205, 0, 0, 0.12);
+    color: #ff9a9a;
+    font-family: 'Poppins', sans-serif;
+    font-size: 12px;
+  }
+
+  .custom-arena-dashboard-markets {
+    position: relative;
+    min-height: 120px;
+  }
+
+  .custom-arena-dashboard-markets-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 40px;
+    border-radius: 16px;
+    background: rgba(22, 6, 38, 0.85);
+    color: #fff;
+  }
 }
 
 .custom-arena-list {
@@ -1004,12 +1138,50 @@
   background: linear-gradient(to top, rgba(28, 21, 42, 0.9), #3b2765);
   border-radius: 12px;
   padding: 14px;
+
+  &[role='group'] {
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid #ffd44b;
+      outline-offset: 2px;
+    }
+  }
 }
 
 .custom-arena-card-head {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 44px;
+  padding-inline: 44px;
+}
+
+.custom-arena-info-button {
+  position: absolute;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #f1eef8;
+  cursor: pointer;
+
+  span {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  &:focus-visible { outline: 2px solid #ffda44; border-radius: 8px; }
 }
 
 .custom-arena-vote-pill {
@@ -1246,7 +1418,7 @@
   }
 }
 
-.custom-arena-creator-details {
+.custom-arena-market-details {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -1258,7 +1430,7 @@
     min-width: 0;
   }
 
-  span {
+  > div > span {
     display: block;
     color: #cac5d6;
     font-family: 'Poppins', sans-serif;
@@ -1266,7 +1438,7 @@
     font-weight: 600;
   }
 
-  strong {
+  > div > strong {
     display: block;
     color: #f1eef8;
     font-family: 'Montserrat', sans-serif;
@@ -1274,6 +1446,45 @@
     font-weight: 700;
     overflow-wrap: anywhere;
   }
+
+  p {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: #cac5d6;
+    font-family: 'Poppins', sans-serif;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  > div > p {
+    margin-top: 6px;
+  }
+
+  .custom-arena-refund-note {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(202, 197, 214, 0.2);
+    font-size: 12px;
+    line-height: 1.6;
+
+    strong {
+      color: #f1eef8;
+      font-weight: 600;
+    }
+  }
+
+  .custom-arena-status-reason {
+    color: #ffd54a;
+  }
+}
+
+.custom-arena-capability-reason {
+  margin: 0;
+  color: #ffd54a;
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 /* ===== Leaderboard page ===== */

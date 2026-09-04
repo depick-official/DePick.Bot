@@ -400,12 +400,50 @@
   }
 
   .win-display {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
     font-family: 'Poppins', sans-serif;
     font-size: 26px;
     font-weight: 600;
     color: #ffd44b;
     letter-spacing: -0.24px;
   }
+}
+
+.quote-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #cac5d6;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.quote-loading-dots {
+  display: inline-flex;
+  gap: 4px;
+
+  i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #ffd54a;
+    animation: quote-dot-fade 1.2s ease-in-out infinite;
+  }
+
+  i:nth-child(2) { animation-delay: .15s; }
+  i:nth-child(3) { animation-delay: .3s; }
+}
+
+@keyframes quote-dot-fade {
+  0%, 100% { opacity: .4; }
+  50% { opacity: .9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quote-loading-dots i { animation: none; }
 }
 
 /* ===== Primary action button (Confirm / OK) ===== */
@@ -457,6 +495,19 @@
   }
 }
 
+.custom-arena-market-terms {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 16px 0;
+  color: #f1eef8;
+  text-align: left;
+
+  section + section { margin-top: 20px; }
+  h4 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+  ul { padding-left: 20px; }
+  p, li { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+}
+
 .custom-arena-modal {
   .custom-arena-form {
     display: flex;
@@ -470,10 +521,9 @@
       font-weight: 700;
     }
 
-    textarea {
+    textarea,
+    input[type='number'] {
       width: 100%;
-      min-height: 96px;
-      resize: vertical;
       border: 1px solid rgba(78, 57, 120, 0.9);
       border-radius: 10px;
       background: rgba(28, 21, 42, 0.8);
@@ -490,6 +540,11 @@
       &:disabled {
         opacity: 0.7;
       }
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
     }
   }
 
@@ -579,42 +634,12 @@
     }
   }
 
-  .custom-arena-liquidity-input {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    min-width: 0;
-
-    input {
-      width: 88px;
-      min-width: 0;
-      height: 30px;
-      padding: 0 10px;
-      border: 1px solid rgba(255, 167, 49, 0.45);
-      border-radius: 8px;
-      background: rgba(28, 21, 42, 0.8);
-      color: #f1eef8;
-      font-family: 'Montserrat', sans-serif;
-      font-size: 13px;
-      font-weight: 700;
-      text-align: right;
-    }
-
-    span {
-      color: #f1eef8;
-      font-family: 'Poppins', sans-serif;
-      font-size: 11px;
-      font-weight: 600;
-    }
-  }
-
-  .custom-arena-liquidity-note {
+  .custom-arena-ai-note {
     margin: 0;
     padding: 9px 10px;
     border-radius: 8px;
     background: rgba(28, 21, 42, 0.42);
-    color: #cac5d6;
+    color: #ffd54a;
     font-family: 'Poppins', sans-serif;
     font-size: 11px;
     line-height: 1.45;
@@ -642,13 +667,25 @@
   }
 
   .custom-arena-success {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 8px 0 0;
+    background: transparent;
     text-align: center;
 
     h4 {
       color: #f1eef8;
       font-family: 'Montserrat', sans-serif;
       font-size: 16px;
-      margin: 0 0 6px;
+      margin: 0;
+      line-height: 1.35;
+    }
+
+    .confirm-button {
+      margin: 12px 0 0;
+      min-height: 44px;
     }
   }
 }

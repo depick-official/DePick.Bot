@@ -156,6 +156,7 @@ export interface DepositChainSpec {
   chainId: number;
   chainName?: string;      // display label for the chain pulldown (e.g. 'Kairos', 'KAIA')
   chainCurrency?: string;  // native gas symbol (informational)
+  treasury?: string;       // per-chain pay-in address the QR buy flow encodes into its EIP-681 transfer
   tokens: DepositTokenSpec[];
 }
 

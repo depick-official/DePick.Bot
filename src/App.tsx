@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
+import BuyPickQrPage from './pages/BuyPickQrPage';
 import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
@@ -104,6 +105,7 @@ function App() {
         <Route path="/custom-arena" element={<CustomArenaPage />} />
         <Route path="/mini-game" element={<MiniGamePage />} />
         <Route path="/deposit" element={<DepositPage />} />
+        <Route path="/buypick" element={<BuyPickQrPage />} />
         <Route path="/office-pool" element={<OfficePoolPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
       </Routes>

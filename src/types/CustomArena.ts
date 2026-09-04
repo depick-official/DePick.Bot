@@ -105,6 +105,8 @@ export interface CustomArenaDashboardCounts {
 }
 
 export interface CustomArenaMarket {
+  yesSemantics?: string | null;
+  noSemantics?: string | null;
   resolutionRules?: string[];
   voidConditions?: string[];
   id: string;

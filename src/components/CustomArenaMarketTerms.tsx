@@ -4,6 +4,14 @@ export default function CustomArenaMarketTerms({ market }: { market: CustomArena
   return (
     <div className="custom-arena-market-terms">
       <section>
+        <h4>Resolves Yes when</h4>
+        <p>{market.yesSemantics || 'No Yes settlement terms were recorded for this market.'}</p>
+      </section>
+      <section>
+        <h4>Resolves No when</h4>
+        <p>{market.noSemantics || 'No No settlement terms were recorded for this market.'}</p>
+      </section>
+      <section>
         <h4>Resolution rules</h4>
         {market.resolutionRules?.length ? (
           <ul>{market.resolutionRules.map((rule, index) => <li key={index}>{rule}</li>)}</ul>

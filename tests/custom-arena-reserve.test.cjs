@@ -47,7 +47,7 @@ test('terms use headings and normal text without nested accordions', () => {
   const nodes = [];
   render('CustomArenaMarketTerms.tsx', { market }, undefined, n => nodes.push(n));
   assert.equal(nodes.some(n => n.type === 'details' || n.type === 'summary'), false);
-  assert.equal(nodes.filter(n => n.type === 'h4').length, 2);
+  assert.equal(nodes.filter(n => n.type === 'h4').length, 4);
 });
 test('prediction confirmation no longer includes the terms component', () => {
   const nodes = [];
@@ -73,10 +73,14 @@ test('unknown reserve is not shown as zero', () => {
 
 test('published terms display exact saved rules and void conditions', () => {
   const text = render('CustomArenaMarketTerms.tsx', { market: {
+    yesSemantics: 'Arsenal wins at full time.',
+    noSemantics: 'Arsenal draws or loses at full time.',
     resolutionRules: ['Yes if Arsenal wins in regular time.'],
     voidConditions: ['Void if this fixture is cancelled.'],
   } });
   assert.match(text, /Resolution rules/);
+  assert.match(text, /Resolves Yes when Arsenal wins at full time\./);
+  assert.match(text, /Resolves No when Arsenal draws or loses at full time\./);
   assert.match(text, /Yes if Arsenal wins in regular time\./);
   assert.match(text, /Void conditions/);
   assert.match(text, /Void if this fixture is cancelled\./);
@@ -86,6 +90,8 @@ test('published terms display exact saved rules and void conditions', () => {
 test('missing published terms are disclosed without inventing conditions', () => {
   const text = render('CustomArenaMarketTerms.tsx', { market: {} });
   assert.match(text, /No resolution rules were recorded/);
+  assert.match(text, /No Yes settlement terms were recorded/);
+  assert.match(text, /No No settlement terms were recorded/);
   assert.match(text, /No separate void conditions were recorded/);
   assert.doesNotMatch(text, /Void if this fixture is cancelled/);
 });

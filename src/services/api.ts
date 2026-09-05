@@ -24,6 +24,7 @@ import {
   CustomArenaCommunityListResponse,
   CustomArenaDashboardResponse,
   CustomArenaProposalResponse,
+  CustomArenaReservePreview,
   CustomArenaScope,
   CustomArenaVoteResponse,
   CustomArenaVoteValue,
@@ -256,16 +257,26 @@ export const customArenaApi = {
     communityId: string,
     scope: CustomArenaScope,
     marketId: string,
-    liquidityPICK: number,
+    marketDepthPICK: number,
   ): Promise<CustomArenaMarket> => {
     const response = await api.post<CustomArenaMarket>('/custom-arena/markets', {
       communityId,
       scope,
       marketId,
-      liquidityPICK,
+      marketDepthPICK,
     }, {
       timeout: 90000,
     });
+    return response.data;
+  },
+  previewReserve: async (
+    marketId: string,
+    marketDepthPICK: number,
+  ): Promise<CustomArenaReservePreview> => {
+    const response = await api.post<CustomArenaReservePreview>(
+      `/custom-arena/markets/${marketId}/reserve-preview`,
+      { marketDepthPICK },
+    );
     return response.data;
   },
   getModeratorCommunities: async (): Promise<CustomArenaCommunityListResponse> => {

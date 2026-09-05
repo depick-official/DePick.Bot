@@ -14,6 +14,7 @@ const community = {
 };
 const dashboard = {
   community, capacity: { availablePick: '10000', totalPick: '10000', reservedPick: '0' },
+  defaultMarketDepthPick: 750,
   counts: { active: 0, awaitingResolution: 0, onHold: 0, resolved: 0, void: 0 },
   volumePick: '0', participantCount: 0, markets: [],
 };

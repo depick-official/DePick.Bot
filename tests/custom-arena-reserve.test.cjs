@@ -104,8 +104,8 @@ test('creation review displays frozen outcome semantics, details, and void terms
     resolution_rules: ['Regulation and stoppage time count.'],
     resolution_plan: { void_conditions: ['Void if the match is cancelled.', null, 42, ''] },
   };
-  const text = render('CustomArenaCreateModal.tsx', { scope: {}, availableCapacityPick: 10000 }, [
-    '', 'review', {}, proposal, null, '500',
+  const text = render('CustomArenaCreateModal.tsx', { scope: {}, availableCapacityPick: 10000, defaultMarketDepthPick: 750 }, [
+    '', 'review', {}, proposal, null, '500', null, false,
   ]);
   for (const phrase of ['Resolves Yes when', proposal.yes_semantics, 'Resolves No when', proposal.no_semantics,
     'Resolution details', proposal.resolution_rules[0], 'Void conditions', proposal.resolution_plan.void_conditions[0]]) {
@@ -117,8 +117,8 @@ test('creation review displays frozen outcome semantics, details, and void terms
 test('creation review discloses missing terms without inventing settlement policy', () => {
   for (const resolution_plan of [undefined, null, {}, { void_conditions: 'invalid' }]) {
     const proposal = { question_text: 'Will City win?', resolution_plan };
-    const text = render('CustomArenaCreateModal.tsx', { scope: {}, availableCapacityPick: 10000 }, [
-      '', 'review', {}, proposal, null, '500',
+    const text = render('CustomArenaCreateModal.tsx', { scope: {}, availableCapacityPick: 10000, defaultMarketDepthPick: 750 }, [
+      '', 'review', {}, proposal, null, '500', null, false,
     ]);
     assert.match(text, /No Yes settlement terms returned\./);
     assert.match(text, /No No settlement terms returned\./);
@@ -127,12 +127,15 @@ test('creation review discloses missing terms without inventing settlement polic
   }
 });
 
-test('creation review shows reserve allocation and remaining community capacity', () => {
+test('creation review shows adjustable depth and the backend reserve preview', () => {
   const proposal = { question_text: 'Question?', outcomes: ['Yes', 'No'] };
-  const text = render('CustomArenaCreateModal.tsx', { communityId: 'community', scope: {}, availableCapacityPick: 10000 }, [
-    'Question?', 'review', { marketId: 'draft', proposal, initial_odds: { p_yes: .35, p_no: .65 } }, proposal, null, '500',
+  const text = render('CustomArenaCreateModal.tsx', { communityId: 'community', scope: {}, availableCapacityPick: 10000, defaultMarketDepthPick: 750 }, [
+    'Question?', 'review', { marketId: 'draft', proposal, initial_odds: { p_yes: .35, p_no: .65 } }, proposal, null, '750',
+    { marketDepthPick: 750, requiredReservePick: '787.365', availableCapacityPick: '10000', remainingCapacityPick: '9212.635', canPublish: true }, false,
   ]);
-  assert.match(text, /PICK reserve to allocate/);
-  assert.match(text, /9,500/);
-  assert.doesNotMatch(text, /525/);
+  assert.match(text, /Market depth/);
+  assert.match(text, /Minimum 500 PICK/);
+  assert.match(text, /Required PICK reserve/);
+  assert.match(text, /787\.365 PICK/);
+  assert.match(text, /9,212\.635 PICK/);
 });

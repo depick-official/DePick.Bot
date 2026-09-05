@@ -144,10 +144,19 @@ export interface CustomArenaMarket {
 export interface CustomArenaDashboardResponse {
   community: CustomArenaCommunity;
   capacity: CustomArenaCapacity;
+  defaultMarketDepthPick: number;
   counts: CustomArenaDashboardCounts;
   volumePick: string;
   participantCount: number;
   markets: CustomArenaMarket[];
+}
+
+export interface CustomArenaReservePreview {
+  marketDepthPick: number;
+  requiredReservePick: string;
+  availableCapacityPick: string;
+  remainingCapacityPick: string;
+  canPublish: boolean;
 }
 
 export interface CustomArenaVoteResponse {

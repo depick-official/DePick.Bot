@@ -1,8 +1,9 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { customArenaApi } from '../services/api';
 import {
   CustomArenaProposal,
   CustomArenaProposalResponse,
+  CustomArenaReservePreview,
   CustomArenaScope,
 } from '../types/CustomArena';
 import '../styles/modal.scss';
@@ -13,6 +14,7 @@ interface CustomArenaCreateModalProps {
   communityId: string;
   scope: CustomArenaScope;
   availableCapacityPick: number;
+  defaultMarketDepthPick: number;
   onClose: () => void;
   onCreated: () => void;
 }
@@ -21,6 +23,7 @@ export default function CustomArenaCreateModal({
   communityId,
   scope,
   availableCapacityPick,
+  defaultMarketDepthPick,
   onClose,
   onCreated,
 }: CustomArenaCreateModalProps) {
@@ -29,13 +32,41 @@ export default function CustomArenaCreateModal({
   const [agentResponse, setAgentResponse] = useState<CustomArenaProposalResponse | null>(null);
   const [proposal, setProposal] = useState<CustomArenaProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reserveInput, setReserveInput] = useState('500');
-  const reservePick = Number(reserveInput);
-  const validReserve = Number.isSafeInteger(reservePick) && reservePick >= 500 && reservePick <= availableCapacityPick;
+  const [depthInput, setDepthInput] = useState(String(defaultMarketDepthPick));
+  const [reservePreview, setReservePreview] = useState<CustomArenaReservePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const marketDepthPick = Number(depthInput);
+  const validDepth = Number.isSafeInteger(marketDepthPick) && marketDepthPick >= 500;
 
   const canClose = step !== 'creating';
   const initialOdds = agentResponse?.initial_odds;
   const fallbackUsed = Boolean(initialOdds?.fallback_used || initialOdds?.status === 'fallback');
+
+  useEffect(() => {
+    if (step !== 'review' || !agentResponse?.marketId || !validDepth) {
+      setReservePreview(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    const timer = window.setTimeout(() => {
+      customArenaApi.previewReserve(agentResponse.marketId!, marketDepthPick)
+        .then((preview) => {
+          if (!cancelled) setReservePreview(preview);
+        })
+        .catch((err) => {
+          console.error('Failed to preview custom arena reserve:', err);
+          if (!cancelled) setReservePreview(null);
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewLoading(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [agentResponse?.marketId, marketDepthPick, step, validDepth]);
 
   const handleValidate = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -90,8 +121,12 @@ export default function CustomArenaCreateModal({
 
   const handleCreate = async () => {
     if (!proposal || !agentResponse?.marketId) return;
-    if (!validReserve) {
-      setError('Choose a whole-PICK reserve of at least 500 within your available capacity.');
+    if (!validDepth) {
+      setError('Choose a whole-PICK market depth of at least 500.');
+      return;
+    }
+    if (!reservePreview?.canPublish) {
+      setError('This market needs more reserve than the community has available.');
       return;
     }
 
@@ -103,7 +138,7 @@ export default function CustomArenaCreateModal({
         communityId,
         scope,
         agentResponse.marketId,
-        reservePick,
+        marketDepthPick,
       );
       if (market.status !== 'OPEN') {
         throw new Error(`Market returned ${market.status}`);
@@ -258,29 +293,30 @@ export default function CustomArenaCreateModal({
                     )}
                   </div>
                   <div className="custom-arena-form">
-                    <label htmlFor="custom-arena-reserve">PICK reserve to allocate</label>
+                    <label htmlFor="custom-arena-depth">Market depth</label>
                     <input
-                      id="custom-arena-reserve"
+                      id="custom-arena-depth"
                       type="number"
                       min={500}
-                      max={availableCapacityPick}
                       step={1}
-                      value={reserveInput}
-                      onChange={(event) => setReserveInput(event.target.value)}
+                      value={depthInput}
+                      onChange={(event) => setDepthInput(event.target.value)}
                       disabled={step === 'creating'}
-                      aria-describedby="custom-arena-reserve-help"
-                      aria-invalid={!validReserve}
+                      aria-describedby="custom-arena-depth-help"
+                      aria-invalid={!validDepth}
                     />
-                    <p id="custom-arena-reserve-help">Minimum 500 PICK. This PICK backs your market.</p>
-                    <div className="custom-arena-review-row"><span>Available capacity</span><strong>{availableCapacityPick.toLocaleString('en')} PICK</strong></div>
-                    <div className="custom-arena-review-row"><span>Remaining after creation</span><strong>{validReserve ? (availableCapacityPick - reservePick).toLocaleString('en') : '—'} PICK</strong></div>
-                    {!validReserve && <p role="alert">Choose a whole-PICK reserve of at least 500 within your available capacity.</p>}
+                    <p id="custom-arena-depth-help">Minimum 500 PICK. Higher depth makes market prices more stable and requires more reserve.</p>
+                    <div className="custom-arena-review-row"><span>Required PICK reserve</span><strong>{previewLoading ? 'Calculating…' : reservePreview ? `${Number(reservePreview.requiredReservePick).toLocaleString('en')} PICK` : '—'}</strong></div>
+                    <div className="custom-arena-review-row"><span>Available capacity</span><strong>{Number(reservePreview?.availableCapacityPick ?? availableCapacityPick).toLocaleString('en')} PICK</strong></div>
+                    <div className="custom-arena-review-row"><span>Remaining after creation</span><strong>{reservePreview?.canPublish ? `${Number(reservePreview.remainingCapacityPick).toLocaleString('en')} PICK` : '—'}</strong></div>
+                    {!validDepth && <p role="alert">Choose a whole-PICK market depth of at least 500.</p>}
+                    {reservePreview && !reservePreview.canPublish && <p role="alert">This market needs more reserve than the community has available.</p>}
                   </div>
                   <button
                     type="button"
                     className="confirm-button"
                     onClick={handleCreate}
-                    disabled={step === 'creating' || !validReserve}
+                    disabled={step === 'creating' || previewLoading || !validDepth || !reservePreview?.canPublish}
                   >
                     {step === 'creating' ? 'Publishing market...' : 'Publish Market'}
                   </button>

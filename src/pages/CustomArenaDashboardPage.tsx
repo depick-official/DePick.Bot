@@ -295,10 +295,11 @@ export default function CustomArenaDashboardPage() {
         </>
       )}
 
-      {showCreateModal && selectedCommunityId && selectedChannel && (
+      {showCreateModal && dashboard && selectedCommunityId && selectedChannel && (
         <CustomArenaCreateModal
           communityId={selectedCommunityId}
-          availableCapacityPick={Number(dashboard?.capacity.availablePick ?? 0)}
+          availableCapacityPick={Number(dashboard.capacity.availablePick)}
+          defaultMarketDepthPick={dashboard.defaultMarketDepthPick}
           scope={selectedChannel}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => setReloadKey((current) => current + 1)}

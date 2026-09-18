@@ -91,7 +91,7 @@ export default function CustomArenaPage() {
         : 'No active group markets yet.';
 
   return (
-    <div className="container">
+    <div className="container custom-arena-page">
       <div className="header">
         <h1>Custom Arena</h1>
         <p>Predict with your community</p>

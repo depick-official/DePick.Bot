@@ -998,6 +998,29 @@
     font-size: 11px;
   }
 
+  .custom-arena-dashboard-capacity-notice {
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 212, 75, 0.45);
+    border-radius: 9px;
+    background: rgba(255, 212, 75, 0.1);
+    color: #f1eef8;
+    font-family: 'Poppins', sans-serif;
+    font-size: 11px;
+
+    strong {
+      display: block;
+      margin-bottom: 2px;
+      color: #ffd44b;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 12px;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.45;
+    }
+  }
+
   .custom-arena-dashboard-create {
     width: 100%;
     height: auto;
@@ -1361,6 +1384,12 @@
     cursor: not-allowed;
     transform: none;
   }
+}
+
+.custom-arena-page .custom-arena-choice-button,
+.custom-arena-page .custom-arena-actions button {
+  box-shadow: 0px 4px 10px rgba(255, 171, 56, 0.4);
+  color: #fafafa;
 }
 
 .custom-arena-card-info {

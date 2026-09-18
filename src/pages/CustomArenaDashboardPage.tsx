@@ -133,7 +133,8 @@ export default function CustomArenaDashboardPage() {
     (channel) => scopeKey(channel) === selectedChannelKey,
   ) || null;
   const counts = dashboard?.counts;
-  const canCreate = Boolean(selectedCommunityId && selectedChannel);
+  const hasCapacity = Number(dashboard?.capacity.totalPick ?? 0) > 0;
+  const canCreate = Boolean(selectedCommunityId && selectedChannel && hasCapacity);
 
   return (
     <div className="container custom-arena-dashboard">
@@ -191,6 +192,12 @@ export default function CustomArenaDashboardPage() {
                 Launch channel selected from {launch.scope.scopeProvider.toLowerCase()}.
               </p>
             )}
+            {dashboard && !hasCapacity && (
+              <div className="custom-arena-dashboard-capacity-notice" role="status">
+                <strong>PICK capacity required</strong>
+                <p>Ask a dePICK admin to activate capacity before creating a market.</p>
+              </div>
+            )}
             <button
               type="button"
               className="custom-arena-create custom-arena-dashboard-create"
@@ -212,10 +219,12 @@ export default function CustomArenaDashboardPage() {
                   <div>
                     <h2>{dashboard.community.displayName}</h2>
                     <p>
-                      {dashboard.community.mode || 'SOCIAL'} · {dashboard.community.status || 'ACTIVE'}
+                      {dashboard.community.mode || 'SOCIAL'} · {hasCapacity ? dashboard.community.status || 'ACTIVE' : 'CAPACITY REQUIRED'}
                     </p>
                   </div>
-                  <span className="custom-arena-status status-open">{dashboard.community.status || 'ACTIVE'}</span>
+                  <span className="custom-arena-status status-open">
+                    {hasCapacity ? dashboard.community.status || 'ACTIVE' : 'CAPACITY REQUIRED'}
+                  </span>
                 </div>
                 <div className="custom-arena-dashboard-stat-grid">
                   <div className="custom-arena-dashboard-stat">

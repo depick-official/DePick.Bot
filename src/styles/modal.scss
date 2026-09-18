@@ -648,6 +648,10 @@
   .custom-arena-rules {
     margin: 12px 0;
 
+    > p {
+      color: #f1eef8;
+    }
+
     span {
       display: block;
       color: #cac5d6;

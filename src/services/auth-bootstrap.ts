@@ -25,7 +25,7 @@ interface WebappAuthResponse {
 
 export type MiniAppAuthProvider = Extract<
   LoginProvider,
-  'TELEGRAM' | 'MESSENGER' | 'DISCORD'
+  'TELEGRAM' | 'MESSENGER' | 'DISCORD' | 'WHATSAPP'
 >;
 
 let bootstrapPromise: Promise<string> | null = null;
@@ -54,10 +54,14 @@ export function detectBootstrapProvider(): MiniAppAuthProvider | null {
   if (urlProvider === 'DISCORD') {
     return 'DISCORD';
   }
+  if (urlProvider === 'WHATSAPP') {
+    return 'WHATSAPP';
+  }
 
   const { loginProvider } = tokenUtils.getTokenData();
   if (loginProvider === 'MESSENGER') return 'MESSENGER';
   if (loginProvider === 'DISCORD') return 'DISCORD';
+  if (loginProvider === 'WHATSAPP') return 'WHATSAPP';
   return null;
 }
 
@@ -127,9 +131,29 @@ async function bootstrapAuthOnce(): Promise<string> {
     return response.data.token;
   }
 
+  if (provider === 'WHATSAPP' && exchangeToken) {
+    const response = await axios.post<WebappAuthResponse>(
+      `${baseURL}/whatsapp/exchange`,
+      { exchangeToken },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        timeout: 15000,
+      },
+    );
+
+    tokenUtils.setToken(response.data.token, 'WHATSAPP');
+    cleanupLaunchParams();
+    return response.data.token;
+  }
+
   const { token, loginProvider } = tokenUtils.getTokenData();
   if (
-    (loginProvider === 'MESSENGER' || loginProvider === 'DISCORD') &&
+    (loginProvider === 'MESSENGER' ||
+      loginProvider === 'DISCORD' ||
+      loginProvider === 'WHATSAPP') &&
     token &&
     tokenUtils.isTokenValid()
   ) {
@@ -137,7 +161,7 @@ async function bootstrapAuthOnce(): Promise<string> {
   }
 
   throw new Error(
-    'Missing Discord/Messenger exchange token or Telegram WebApp initData',
+    'Missing Discord/Messenger/WhatsApp exchange token or Telegram WebApp initData',
   );
 }
 

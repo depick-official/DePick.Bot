@@ -35,6 +35,13 @@ body {
   margin: auto;
 }
 
+// Wide pages (e.g. the franchise dashboard) opt out of the 420px phone frame:
+// a page toggles `.root-wide` on #root while mounted. width:100% keeps it phone-
+// width on mobile and lets it expand up to 1200px on a desktop browser.
+#root.root-wide {
+  max-width: 1200px;
+}
+
 .safe-area {
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }

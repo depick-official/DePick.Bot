@@ -227,6 +227,16 @@ export const predictionApi = {
     return response.data.filter(p => p.status === 'UPCOMING');
   },
 
+  // Active leagues + display names — the source of truth for league labels in the
+  // /games browser (keyed on `tournament`, the same field predictions carry).
+  // `displayName` is null until an operator sets it; the SPA then derives a label.
+  getLeagues: async (): Promise<Array<{ tournament: string; displayName: string | null }>> => {
+    const response = await api.get<Array<{ tournament: string; displayName: string | null }>>(
+      '/predictions/leagues',
+    );
+    return response.data;
+  },
+
   // M4.2 — chain-true post-slippage quote. LMSR routes through hub.previewPredict;
   // NAIVE is BE-synthesized using the same post-bet pool-ratio formula the FE
   // used to compute locally. Replaces `calculateWin` in PredictionModal.
@@ -504,22 +514,48 @@ export interface PredictionsSummary {
   commission: null | { feeBps: number; payableCommission: number; estimatedCommission: number; note: string };
 }
 export interface PickSummary {
-  buyPick: { count: number; usdcInRaw: string; pickIssuedRaw: string };
-  sellPick: { count: number; usdcOutRaw: string; pickReclaimedRaw: string };
+  // Human units (per-token decimals normalized server-side).
+  buyPick: { count: number; usdcIn: number; pickIssued: number };
+  sellPick: { count: number; usdcOut: number; pickReclaimed: number };
   grantRisk: {
     promotionalPickReceived: number; promotionalPickUsdcEquiv: number;
-    claimedPickWinnings: number; netPlatformFundedValueExtractedRaw: string;
+    claimedPickWinnings: number; netPlatformFundedValueExtracted: number;
     valuation: { pickPerUsd: number; source: string; at: string };
   };
   winnings: { claimedToken: number; claimableToken: number; claimableCredit: number };
 }
 export interface ReportRows<T> { items: T[]; total: number; limit: number; offset: number }
 
+// Reserved communityId meaning "users with no home community" (dePick-view reconciliation bucket).
+export const UNASSIGNED_SCOPE = '__unassigned__';
+
+export interface OutflowWatchRow {
+  communityId: string;
+  displayName: string;
+  scopeProvider: string | null; // null for the synthetic "(Unassigned)" row
+  users: number;
+  usdcIn: number;
+  usdcOut: number;
+  net: number;
+  freePick: number;
+  feeBps: number;
+}
+export interface OutflowWatch {
+  rows: OutflowWatchRow[];
+  totals: { users: number; usdcIn: number; usdcOut: number; net: number; freePick: number };
+}
+
 type ReportParams = Record<string, string | number | undefined>;
 
+export interface ReportingScope {
+  isSuperAdmin: boolean;
+  communities: ModeratorCommunity[];
+  allCommunities?: ModeratorCommunity[];
+}
+
 export const reportingApi = {
-  communities: async (): Promise<ModeratorCommunity[]> => {
-    const r = await api.get<ModeratorCommunity[]>('/moderator/reports/communities');
+  communities: async (): Promise<ReportingScope> => {
+    const r = await api.get<ReportingScope>('/moderator/reports/communities');
     return r.data;
   },
   predictionsSummary: async (params: ReportParams): Promise<PredictionsSummary> => {
@@ -536,6 +572,10 @@ export const reportingApi = {
   },
   pick: async (params: ReportParams): Promise<ReportRows<any>> => {
     const r = await api.get<ReportRows<any>>('/moderator/reports/pick-transactions', { params });
+    return r.data;
+  },
+  outflowWatch: async (params: ReportParams): Promise<OutflowWatch> => {
+    const r = await api.get<OutflowWatch>('/moderator/reports/outflow-watch', { params });
     return r.data;
   },
   userSummary: async (id: string): Promise<any> => {

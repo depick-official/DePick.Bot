@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
+import GamesPage from './pages/GamesPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
 import BuyPickQrPage from './pages/BuyPickQrPage';
@@ -77,6 +78,7 @@ function App() {
       <Route path="/" element={<PredictPage />} />
       <Route path="/predict" element={<PredictPage />} />
       <Route path="/predict/:matchId" element={<PredictPage />} />
+      <Route path="/games" element={<GamesPage />} />
       <Route path="/custom-arena" element={<CustomArenaPage />} />
       <Route path="/mini-game" element={<MiniGamePage />} />
       <Route path="/deposit" element={<DepositPage />} />

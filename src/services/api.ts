@@ -249,7 +249,7 @@ export const customArenaApi = {
       scope,
       communityId,
     }, {
-      timeout: 90000,
+      timeout: 300000,
     });
     return response.data;
   },

@@ -24,7 +24,9 @@ const TABS: Array<{ id: LeaderboardTab; label: string }> = [
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const provider = searchParams.get('provider') || undefined;
+  // Upper-case to match the Provider enum the BE scopes by. Mini-App links stamp a
+  // lower-case provider (e.g. ?provider=whatsapp), the same way auth-bootstrap normalises it.
+  const provider = searchParams.get('provider')?.toUpperCase() || undefined;
   const [activeTab, setActiveTab] = useState<LeaderboardTab>('credit');
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse>(EMPTY_LEADERBOARD);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,7 +69,8 @@ export default function LeaderboardPage() {
   }, [activeTab, leaderboard]);
 
   const firstPlace = activeRows[0];
-  const scopeLabel = provider === 'TELEGRAM' ? 'Telegram' : 'All DePick';
+  const scopeLabel =
+    provider === 'TELEGRAM' ? 'Telegram' : provider === 'WHATSAPP' ? 'WhatsApp' : 'All DePick';
 
   return (
     <div className="leaderboard-page">

@@ -91,7 +91,8 @@ api.interceptors.response.use(
       typeof original?.url === 'string' &&
       (original.url.includes('/auth/telegram/webapp') ||
         original.url.includes('/messenger/exchange') ||
-        original.url.includes('/auth/discord/exchange'));
+        original.url.includes('/auth/discord/exchange') ||
+        original.url.includes('/whatsapp/refresh'));
     if (status !== 401 || !original || original._retried || isBootstrap) {
       if (status === 401) {
         tokenUtils.removeToken();
@@ -100,7 +101,37 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (loginProvider !== 'TELEGRAM') {
+    // Pick the per-provider refresh strategy. TELEGRAM re-runs bootstrapAuth (a
+    // fresh initData exchange). WHATSAPP redeems its device-bound refresh token at
+    // POST /whatsapp/refresh via plain axios (not `api`, to avoid re-entering this
+    // interceptor) and swaps the access token. Any other provider cannot refresh.
+    let refreshFn: (() => Promise<string>) | null = null;
+    if (loginProvider === 'TELEGRAM') {
+      refreshFn = bootstrapAuth;
+    } else if (loginProvider === 'WHATSAPP') {
+      refreshFn = async () => {
+        const refreshToken = tokenUtils.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No WhatsApp refresh token stored');
+        }
+        const baseURL = import.meta.env.VITE_API_URL || '';
+        const resp = await axios.post<{ token: string; expiresAt: number }>(
+          `${baseURL}/whatsapp/refresh`,
+          { refreshToken },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+            },
+            timeout: 15000,
+          },
+        );
+        tokenUtils.setToken(resp.data.token, 'WHATSAPP');
+        return resp.data.token;
+      };
+    }
+
+    if (!refreshFn) {
       tokenUtils.removeToken();
       console.error(`Authentication failed (no refresh available for ${loginProvider || 'unknown'} provider)`);
       return Promise.reject(error);
@@ -123,7 +154,7 @@ api.interceptors.response.use(
 
     isRefreshing = true;
     try {
-      const newToken = await bootstrapAuth();
+      const newToken = await refreshFn();
       pendingQueue.forEach((cb) => cb(newToken));
       pendingQueue = [];
       original.headers.Authorization = `Bearer ${newToken}`;
@@ -238,7 +269,7 @@ export const predictionApi = {
   },
 
   // M4.2 — chain-true post-slippage quote. LMSR routes through hub.previewPredict;
-  // NAIVE is BE-synthesized using the same post-bet pool-ratio formula the FE
+  // NAIVE is BE-synthesized using the same post-prediction pool-ratio formula the FE
   // used to compute locally. Replaces `calculateWin` in PredictionModal.
   getQuote: async (predictionId: string, body: QuoteRequest): Promise<QuoteResponse> => {
     const response = await api.post<QuoteResponse>(`/predictions/${predictionId}/quote`, body);

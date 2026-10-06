@@ -9,10 +9,16 @@ import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
 import ModeratorPortalPage from './pages/ModeratorPortalPage';
-import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
+import {
+  bootstrapAuth,
+  detectBootstrapProvider,
+  PairingRequiredError,
+} from './services/auth-bootstrap';
+import WhatsappPairing from './components/WhatsappPairing';
 
 type AuthState =
   | { status: 'bootstrapping' }
+  | { status: 'pairing' }
   | { status: 'ready' }
   | { status: 'error'; message: string };
 
@@ -35,6 +41,12 @@ function App() {
       })
       .catch((err) => {
         if (cancelled) {
+          return;
+        }
+        // WhatsApp launch with no usable session → show the device-pairing screen
+        // rather than an error (F2/A2).
+        if (err instanceof PairingRequiredError) {
+          setAuth({ status: 'pairing' });
           return;
         }
         console.error('[auth-bootstrap]', err);
@@ -63,6 +75,9 @@ function App() {
 
   if (auth.status === 'bootstrapping') {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Authenticating…</div>;
+  }
+  if (auth.status === 'pairing') {
+    return <WhatsappPairing onPaired={() => setAuth({ status: 'ready' })} />;
   }
   if (auth.status === 'error') {
     return (

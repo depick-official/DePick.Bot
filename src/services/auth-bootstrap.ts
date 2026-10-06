@@ -28,6 +28,18 @@ export type MiniAppAuthProvider = Extract<
   'TELEGRAM' | 'MESSENGER' | 'DISCORD' | 'WHATSAPP'
 >;
 
+/**
+ * Thrown when a WHATSAPP launch has no usable stored session and must complete
+ * the device-pairing handshake. App.tsx catches this to mount WhatsappPairing
+ * rather than showing a dead error screen (F2).
+ */
+export class PairingRequiredError extends Error {
+  constructor() {
+    super('WhatsApp device pairing required');
+    this.name = 'PairingRequiredError';
+  }
+}
+
 let bootstrapPromise: Promise<string> | null = null;
 
 function cleanupLaunchParams() {
@@ -131,24 +143,6 @@ async function bootstrapAuthOnce(): Promise<string> {
     return response.data.token;
   }
 
-  if (provider === 'WHATSAPP' && exchangeToken) {
-    const response = await axios.post<WebappAuthResponse>(
-      `${baseURL}/whatsapp/exchange`,
-      { exchangeToken },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        timeout: 15000,
-      },
-    );
-
-    tokenUtils.setToken(response.data.token, 'WHATSAPP');
-    cleanupLaunchParams();
-    return response.data.token;
-  }
-
   const { token, loginProvider } = tokenUtils.getTokenData();
   if (
     (loginProvider === 'MESSENGER' ||
@@ -160,8 +154,15 @@ async function bootstrapAuthOnce(): Promise<string> {
     return token;
   }
 
+  // WhatsApp has no URL-borne exchange token — a launch with no usable stored
+  // session must complete the device-pairing handshake (F1/F2). Signal that to
+  // App.tsx so it mounts the pairing screen instead of an error.
+  if (provider === 'WHATSAPP') {
+    throw new PairingRequiredError();
+  }
+
   throw new Error(
-    'Missing Discord/Messenger/WhatsApp exchange token or Telegram WebApp initData',
+    'Missing Discord/Messenger exchange token or Telegram WebApp initData',
   );
 }
 

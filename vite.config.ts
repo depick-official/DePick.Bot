@@ -18,5 +18,13 @@ export default defineConfig(({ mode }) => {
       port: devPort,
       allowedHosts: allowAllHosts ? true : allowedHosts,
     },
+    // Mirror `server` so `vite preview` (production bundle) serves on the same
+    // port + allowed hosts as dev — lets the tunnel point at the real build
+    // (and sidesteps React StrictMode's dev-only double-invoke during UAT).
+    preview: {
+      host: '0.0.0.0',
+      port: devPort,
+      allowedHosts: allowAllHosts ? true : allowedHosts,
+    },
   };
 })

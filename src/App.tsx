@@ -7,6 +7,7 @@ import BuyPickQrPage from './pages/BuyPickQrPage';
 import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
+import CustomArenaDashboardPage from './pages/CustomArenaDashboardPage';
 import WelcomeModal, { WelcomeKind } from './components/WelcomeModal';
 import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
 
@@ -103,6 +104,7 @@ function App() {
         <Route path="/predict" element={<PredictPage />} />
         <Route path="/predict/:matchId" element={<PredictPage />} />
         <Route path="/custom-arena" element={<CustomArenaPage />} />
+        <Route path="/custom-arena/dashboard" element={<CustomArenaDashboardPage />} />
         <Route path="/mini-game" element={<MiniGamePage />} />
         <Route path="/deposit" element={<DepositPage />} />
         <Route path="/buypick" element={<BuyPickQrPage />} />

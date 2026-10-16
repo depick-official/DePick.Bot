@@ -15,6 +15,7 @@ import {
   PairingRequiredError,
 } from './services/auth-bootstrap';
 import WhatsappPairing from './components/WhatsappPairing';
+import WaProvisionPage from './components/WaProvisionPage';
 
 type AuthState =
   | { status: 'bootstrapping' }
@@ -22,10 +23,18 @@ type AuthState =
   | { status: 'ready' }
   | { status: 'error'; message: string };
 
+/** /wa-provision is authorized by its own bearer magic-link token, NOT an app
+ *  session, so it must bypass the global bootstrapAuth gate. `endsWith` tolerates
+ *  a `/bot` deploy base. */
+const isProvisionRoute = () => window.location.pathname.endsWith('/wa-provision');
+
 function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'bootstrapping' });
 
   useEffect(() => {
+    // The provisioning page carries its own bearer token — skip the session
+    // bootstrap (Telegram initData / WhatsApp pairing) entirely for it.
+    if (isProvisionRoute()) return;
     // M7.4.6 — Exchange Telegram WebApp initData for a 1h JWT before any
     // page renders. Replaces the legacy ?auth_token= URL parameter.
     const tg = (window as any).Telegram?.WebApp;
@@ -72,6 +81,12 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  // Bearer-token provisioning page — rendered directly, bypassing the session
+  // auth state machine (the bootstrap effect no-ops on this route).
+  if (isProvisionRoute()) {
+    return <WaProvisionPage />;
+  }
 
   if (auth.status === 'bootstrapping') {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Authenticating…</div>;

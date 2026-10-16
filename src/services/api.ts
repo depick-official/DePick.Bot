@@ -35,12 +35,15 @@ export interface LeaderboardUserRanking {
   tokenBalance?: number;
   winRate?: number;
   referralCount?: number;
+  volume?: number; // total staked PICK (Volume board)
+  largePredictionCount?: number; // count of predictions over the Big-Pick threshold
 }
 
 export interface LeaderboardResponse {
-  creditRanking: LeaderboardUserRanking[];
-  winRateRanking: LeaderboardUserRanking[];
+  volumeRanking: LeaderboardUserRanking[];
+  bigPredictionRanking: LeaderboardUserRanking[];
   referralRanking: LeaderboardUserRanking[];
+  bigPickThreshold?: number; // stake threshold (whole PICK) behind the Big Picks board
 }
 
 // Create axios instance

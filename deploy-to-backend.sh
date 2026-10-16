@@ -6,13 +6,15 @@ npm run build
 
 # Remove old bot files (keep assets folder intact)
 echo "Removing old bot files..."
-rm -f ../DePick.BE/public/index.html
-rm -f ../DePick.BE/public/assets/index-*.*
+TARGET="${TARGET:-DePick.BE}"
+rm -f ../${TARGET}/public/index.html
+rm -f ../${TARGET}/public/assets/index-*.*
 
 # Copy built files to backend
 echo "Copying to backend..."
-cp -r dist/* ../DePick.BE/public/
+echo "deploying to ../${TARGET}"
+cp -r dist/* ../${TARGET}/public/
 
-echo "✅ Bot deployed to DePick.BE/public"
+echo "✅ Bot deployed to ../${TARGET}/public"
 echo "Assets folder preserved in backend"
 echo "Access at: http://localhost:3001/bot/"

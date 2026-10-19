@@ -144,13 +144,17 @@ async function bootstrapAuthOnce(): Promise<string> {
   }
 
   const { token, loginProvider } = tokenUtils.getTokenData();
-  if (
+  const storedUsable =
     (loginProvider === 'MESSENGER' ||
       loginProvider === 'DISCORD' ||
       loginProvider === 'WHATSAPP') &&
     token &&
-    tokenUtils.isTokenValid()
-  ) {
+    tokenUtils.isTokenValid();
+  // Reuse a stored session only for an in-app navigation (no ?provider) or a
+  // launch whose provider MATCHES the stored one. A different provider's token
+  // (e.g. a Discord session reused on a ?provider=whatsapp link) would authenticate
+  // as the WRONG identity — fall through and re-auth as the launch's provider.
+  if (storedUsable && (!provider || loginProvider === provider)) {
     return token;
   }
 

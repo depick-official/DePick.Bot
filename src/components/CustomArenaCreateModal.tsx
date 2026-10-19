@@ -11,12 +11,14 @@ type CreateStep = 'input' | 'loading' | 'clarification' | 'review' | 'creating' 
 
 interface CustomArenaCreateModalProps {
   scope: CustomArenaScope;
+  communityId: string;
   onClose: () => void;
   onCreated: () => void;
 }
 
 export default function CustomArenaCreateModal({
   scope,
+  communityId,
   onClose,
   onCreated,
 }: CustomArenaCreateModalProps) {
@@ -24,6 +26,7 @@ export default function CustomArenaCreateModal({
   const [step, setStep] = useState<CreateStep>('input');
   const [agentResponse, setAgentResponse] = useState<CustomArenaProposalResponse | null>(null);
   const [proposal, setProposal] = useState<CustomArenaProposal | null>(null);
+  const [marketId, setMarketId] = useState<string | null>(null);
   const [liquidityPICK, setLiquidityPICK] = useState('500');
   const [error, setError] = useState<string | null>(null);
 
@@ -47,11 +50,12 @@ export default function CustomArenaCreateModal({
     setStep('loading');
 
     try {
-      const response = await customArenaApi.createProposal(topic, scope);
+      const response = await customArenaApi.createProposal(topic, communityId, scope);
       setAgentResponse(response);
 
       if (response.status === 'created' && response.proposal) {
         setProposal(response.proposal);
+        setMarketId(response.marketId ?? null);
         setStep('review');
         return;
       }
@@ -66,12 +70,12 @@ export default function CustomArenaCreateModal({
     } catch (err) {
       console.error('Failed create custom arena proposal:', err);
       setStep('input');
-      setError('Failed to validate question.');
+      setError(getCreateErrorMessage(err));
     }
   };
 
   const handleCreate = async () => {
-    if (!proposal) return;
+    if (!proposal || !marketId) return;
     const liquidity = Number(liquidityPICK);
     if (!Number.isFinite(liquidity) || liquidity < 500) {
       setError('Minimum creator liquidity is 500 PICK.');
@@ -82,7 +86,7 @@ export default function CustomArenaCreateModal({
     setStep('creating');
 
     try {
-      const market = await customArenaApi.createMarket(scope, proposal, liquidity);
+      const market = await customArenaApi.createMarket(communityId, marketId, scope, liquidity);
       if (market.status !== 'OPEN') {
         throw new Error(`Market returned ${market.status}`);
       }

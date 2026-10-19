@@ -1,4 +1,4 @@
-export type CustomArenaScopeProvider = 'TELEGRAM' | 'DISCORD';
+export type CustomArenaScopeProvider = 'TELEGRAM' | 'DISCORD' | 'WHATSAPP';
 export type CustomArenaVoteValue = -1 | 0 | 1;
 export type CustomArenaCreateStatus =
   | 'created'
@@ -27,6 +27,23 @@ export interface CustomArenaProposalResponse {
   clarification_question?: string | null;
   suggestions?: string[];
   error?: string | null;
+  marketId?: string | null;
+}
+
+export interface CustomArenaModeratorChannel {
+  scopeProvider: CustomArenaScopeProvider;
+  scopeExternalId: string;
+  displayName?: string | null;
+}
+
+export interface CustomArenaModeratorCommunity {
+  id: string;
+  displayName: string;
+  channels: CustomArenaModeratorChannel[];
+}
+
+export interface CustomArenaModeratorCommunitiesResponse {
+  communities: CustomArenaModeratorCommunity[];
 }
 
 export interface CustomArenaMarket {

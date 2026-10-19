@@ -21,7 +21,7 @@ import {
 } from '../types/OfficePool';
 import {
   CustomArenaMarket,
-  CustomArenaProposal,
+  CustomArenaModeratorCommunitiesResponse,
   CustomArenaProposalResponse,
   CustomArenaScope,
   CustomArenaVoteResponse,
@@ -283,10 +283,12 @@ export const predictionApi = {
 export const customArenaApi = {
   createProposal: async (
     topic: string,
-    scope?: CustomArenaScope,
+    communityId: string,
+    scope: CustomArenaScope,
   ): Promise<CustomArenaProposalResponse> => {
     const response = await api.post<CustomArenaProposalResponse>('/custom-arena/proposals', {
       topic,
+      communityId,
       scope,
     }, {
       timeout: 90000,
@@ -294,17 +296,25 @@ export const customArenaApi = {
     return response.data;
   },
   createMarket: async (
+    communityId: string,
+    marketId: string,
     scope: CustomArenaScope,
-    proposal: CustomArenaProposal,
-    liquidityPICK: number,
+    marketDepthPICK: number,
   ): Promise<CustomArenaMarket> => {
     const response = await api.post<CustomArenaMarket>('/custom-arena/markets', {
+      communityId,
+      marketId,
       scope,
-      proposal: { success: true, status: 'created', proposal },
-      liquidityPICK,
+      marketDepthPICK,
     }, {
       timeout: 90000,
     });
+    return response.data;
+  },
+  listModeratorCommunities: async (): Promise<CustomArenaModeratorCommunitiesResponse> => {
+    const response = await api.get<CustomArenaModeratorCommunitiesResponse>(
+      '/custom-arena/moderator/communities',
+    );
     return response.data;
   },
   getGroupMarkets: async (

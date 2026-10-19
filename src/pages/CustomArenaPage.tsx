@@ -22,6 +22,8 @@ export default function CustomArenaPage() {
   const [selectedMarket, setSelectedMarket] = useState<CustomArenaMarket | null>(null);
   const [selectedOption, setSelectedOption] = useState<0 | 1 | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [communityId, setCommunityId] = useState<string | null>(null);
+  const [resolvingCommunity, setResolvingCommunity] = useState(false);
 
   const fetchMarkets = useCallback(async () => {
     if (activeTab !== 'created' && !groupScope) {
@@ -52,6 +54,41 @@ export default function CustomArenaPage() {
   useEffect(() => {
     if (groupScope && shouldOpenCreate) setShowCreateModal(true);
   }, [groupScope, shouldOpenCreate]);
+
+  // D1 client-side resolver: match the current group scope against the channels[]
+  // of every moderated community to resolve the owning communityId. Fail-closed —
+  // any fetch error or no-match leaves communityId null, keeping Create disabled.
+  useEffect(() => {
+    if (!groupScope) {
+      setCommunityId(null);
+      return;
+    }
+    let cancelled = false;
+    setResolvingCommunity(true);
+    customArenaApi
+      .listModeratorCommunities()
+      .then((data) => {
+        if (cancelled) return;
+        const match = data.communities.find((community) =>
+          community.channels.some(
+            (channel) =>
+              channel.scopeProvider === groupScope.scopeProvider &&
+              channel.scopeExternalId === groupScope.scopeExternalId,
+          ),
+        );
+        setCommunityId(match?.id ?? null);
+      })
+      .catch((err) => {
+        console.error('Failed resolve custom arena moderator community:', err);
+        if (!cancelled) setCommunityId(null);
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingCommunity(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupScope]);
 
   const patchMarket = (id: string, patch: Partial<CustomArenaMarket>) => {
     setMarkets((current) => current.map((market) =>
@@ -137,18 +174,24 @@ export default function CustomArenaPage() {
           <button
             type="button"
             className="custom-arena-create"
-            onClick={() => groupScope && setShowCreateModal(true)}
-            disabled={!groupScope}
-            aria-describedby={!groupScope ? 'custom-arena-lock-tip' : undefined}
+            onClick={() => groupScope && communityId && setShowCreateModal(true)}
+            disabled={!groupScope || !communityId}
+            aria-describedby={
+              !groupScope || !communityId ? 'custom-arena-lock-tip' : undefined
+            }
           >
-            {!groupScope && <span className="lock-icon">i</span>}
+            {(!groupScope || !communityId) && <span className="lock-icon">i</span>}
             Create
           </button>
-          {!groupScope && (
+          {!groupScope ? (
             <span id="custom-arena-lock-tip" className="custom-arena-tooltip">
               Start from a group to play with friends.
             </span>
-          )}
+          ) : !communityId && !resolvingCommunity ? (
+            <span id="custom-arena-lock-tip" className="custom-arena-tooltip">
+              Only the group's moderator can create markets.
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -186,9 +229,10 @@ export default function CustomArenaPage() {
         </div>
       )}
 
-      {showCreateModal && groupScope && (
+      {showCreateModal && groupScope && communityId && (
         <CustomArenaCreateModal
           scope={groupScope}
+          communityId={communityId}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setActiveTab('created');
@@ -219,7 +263,11 @@ function useGroupScope(searchParams: URLSearchParams): CustomArenaScope | null {
     const displayName =
       searchParams.get('scope_display_name') || searchParams.get('displayName') || undefined;
 
-    if ((provider !== 'TELEGRAM' && provider !== 'DISCORD') || !scopeExternalId) return null;
+    if (
+      (provider !== 'TELEGRAM' && provider !== 'DISCORD' && provider !== 'WHATSAPP') ||
+      !scopeExternalId
+    )
+      return null;
     return { scopeProvider: provider, scopeExternalId, displayName };
   }, [searchParams]);
 }

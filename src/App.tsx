@@ -9,11 +9,13 @@ import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
 import ModeratorPortalPage from './pages/ModeratorPortalPage';
+import CustomArenaDashboardPage from './pages/CustomArenaDashboardPage';
+import WelcomeModal, { WelcomeKind } from './components/WelcomeModal';
 import {
-  bootstrapAuth,
-  detectBootstrapProvider,
-  PairingRequiredError,
-} from './services/auth-bootstrap';
+    bootstrapAuth,
+    detectBootstrapProvider,
+    PairingRequiredError,
+  } from './services/auth-bootstrap';
 import WhatsappPairing from './components/WhatsappPairing';
 import WaProvisionPage from './components/WaProvisionPage';
 
@@ -28,8 +30,31 @@ type AuthState =
  *  a `/bot` deploy base. */
 const isProvisionRoute = () => window.location.pathname.endsWith('/wa-provision');
 
+/**
+ * Read `?welcome=` once, at module load, before anything can navigate or strip
+ * it. The backend only sets it on the sign-in that created the account, so this
+ * is the single moment it exists.
+ */
+function readWelcomeKind(): WelcomeKind | null {
+  const value = new URLSearchParams(window.location.search).get('welcome');
+  return value === 'referral' || value === 'discord' ? value : null;
+}
+
 function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'bootstrapping' });
+  const [welcome, setWelcome] = useState<WelcomeKind | null>(readWelcomeKind);
+
+  const dismissWelcome = () => {
+    setWelcome(null);
+    // Drop the flag so a refresh or a shared URL does not replay the greeting.
+    const url = new URL(window.location.href);
+    url.searchParams.delete('welcome');
+    window.history.replaceState(
+      {},
+      document.title,
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  };
 
   useEffect(() => {
     // The provisioning page carries its own bearer token — skip the session
@@ -104,19 +129,23 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<PredictPage />} />
-      <Route path="/predict" element={<PredictPage />} />
-      <Route path="/predict/:matchId" element={<PredictPage />} />
-      <Route path="/games" element={<GamesPage />} />
-      <Route path="/custom-arena" element={<CustomArenaPage />} />
-      <Route path="/mini-game" element={<MiniGamePage />} />
-      <Route path="/deposit" element={<DepositPage />} />
-      <Route path="/buypick" element={<BuyPickQrPage />} />
-      <Route path="/dashboard" element={<ModeratorPortalPage />} />
-      <Route path="/office-pool" element={<OfficePoolPage />} />
-      <Route path="/leaderboard" element={<LeaderboardPage />} />
-    </Routes>
+    <>
+      {welcome && <WelcomeModal kind={welcome} onClose={dismissWelcome} />}
+      <Routes>
+        <Route path="/" element={<PredictPage />} />
+        <Route path="/predict" element={<PredictPage />} />
+        <Route path="/predict/:matchId" element={<PredictPage />} />
+        <Route path="/games" element={<GamesPage />} />
+        <Route path="/custom-arena" element={<CustomArenaPage />} />
+        <Route path="/custom-arena/dashboard" element={<CustomArenaDashboardPage />} />
+        <Route path="/mini-game" element={<MiniGamePage />} />
+        <Route path="/deposit" element={<DepositPage />} />
+        <Route path="/buypick" element={<BuyPickQrPage />} />
+        <Route path="/dashboard" element={<ModeratorPortalPage />} />
+        <Route path="/office-pool" element={<OfficePoolPage />} />
+        <Route path="/leaderboard" element={<LeaderboardPage />} />
+      </Routes>
+    </>
   );
 }
 

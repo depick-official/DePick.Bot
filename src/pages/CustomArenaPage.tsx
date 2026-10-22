@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import CustomArenaCreateModal from '../components/CustomArenaCreateModal';
 import CustomArenaMarketCard from '../components/CustomArenaMarketCard';
 import CustomArenaPredictionModal from '../components/CustomArenaPredictionModal';
 import { customArenaApi } from '../services/api';
@@ -12,18 +11,13 @@ type CustomArenaTab = 'group' | 'created' | 'history';
 export default function CustomArenaPage() {
   const [searchParams] = useSearchParams();
   const groupScope = useGroupScope(searchParams);
-  const shouldOpenCreate = searchParams.get('create') === '1';
   const [activeTab, setActiveTab] = useState<CustomArenaTab>(parseTab(searchParams.get('tab')));
   const [markets, setMarkets] = useState<CustomArenaMarket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [busyMarketId, setBusyMarketId] = useState<string | null>(null);
-  const [busyCreatorYieldMarketId, setBusyCreatorYieldMarketId] = useState<string | null>(null);
-  const [expandedCreatorMarketId, setExpandedCreatorMarketId] = useState<string | null>(null);
+  const [expandedMarketId, setExpandedMarketId] = useState<string | null>(null);
   const [selectedMarket, setSelectedMarket] = useState<CustomArenaMarket | null>(null);
   const [selectedOption, setSelectedOption] = useState<0 | 1 | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [communityId, setCommunityId] = useState<string | null>(null);
-  const [resolvingCommunity, setResolvingCommunity] = useState(false);
 
   const fetchMarkets = useCallback(async () => {
     if (activeTab !== 'created' && !groupScope) {
@@ -50,45 +44,6 @@ export default function CustomArenaPage() {
   useEffect(() => {
     fetchMarkets();
   }, [fetchMarkets]);
-
-  useEffect(() => {
-    if (groupScope && shouldOpenCreate) setShowCreateModal(true);
-  }, [groupScope, shouldOpenCreate]);
-
-  // D1 client-side resolver: match the current group scope against the channels[]
-  // of every moderated community to resolve the owning communityId. Fail-closed —
-  // any fetch error or no-match leaves communityId null, keeping Create disabled.
-  useEffect(() => {
-    if (!groupScope) {
-      setCommunityId(null);
-      return;
-    }
-    let cancelled = false;
-    setResolvingCommunity(true);
-    customArenaApi
-      .listModeratorCommunities()
-      .then((data) => {
-        if (cancelled) return;
-        const match = data.communities.find((community) =>
-          community.channels.some(
-            (channel) =>
-              channel.scopeProvider === groupScope.scopeProvider &&
-              channel.scopeExternalId === groupScope.scopeExternalId,
-          ),
-        );
-        setCommunityId(match?.id ?? null);
-      })
-      .catch((err) => {
-        console.error('Failed resolve custom arena moderator community:', err);
-        if (!cancelled) setCommunityId(null);
-      })
-      .finally(() => {
-        if (!cancelled) setResolvingCommunity(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [groupScope]);
 
   const patchMarket = (id: string, patch: Partial<CustomArenaMarket>) => {
     setMarkets((current) => current.map((market) =>
@@ -127,20 +82,6 @@ export default function CustomArenaPage() {
     }
   };
 
-  const handleClaimCreatorYield = async (market: CustomArenaMarket) => {
-    try {
-      setBusyCreatorYieldMarketId(market.id);
-      await customArenaApi.claimCreatorYield(market.id);
-      alert('Creator yield claim submitted.');
-      fetchMarkets();
-    } catch (err) {
-      console.error('Failed claim custom arena creator yield:', err);
-      alert('Creator yield is not available yet.');
-    } finally {
-      setBusyCreatorYieldMarketId(null);
-    }
-  };
-
   const emptyText = !groupScope && activeTab !== 'created'
     ? 'Open from a group to unlock Custom Arena.'
     : activeTab === 'created'
@@ -150,10 +91,10 @@ export default function CustomArenaPage() {
         : 'No active group markets yet.';
 
   return (
-    <div className="container">
+    <div className="container custom-arena-page">
       <div className="header">
         <h1>Custom Arena</h1>
-        <p>Create and predict with your community</p>
+        <p>Predict with your community</p>
       </div>
 
       <div className="predict-toolbar">
@@ -170,29 +111,6 @@ export default function CustomArenaPage() {
           ))}
         </div>
 
-        <div className="custom-arena-create-wrap">
-          <button
-            type="button"
-            className="custom-arena-create"
-            onClick={() => groupScope && communityId && setShowCreateModal(true)}
-            disabled={!groupScope || !communityId}
-            aria-describedby={
-              !groupScope || !communityId ? 'custom-arena-lock-tip' : undefined
-            }
-          >
-            {(!groupScope || !communityId) && <span className="lock-icon">i</span>}
-            Create
-          </button>
-          {!groupScope ? (
-            <span id="custom-arena-lock-tip" className="custom-arena-tooltip">
-              Start from a group to play with friends.
-            </span>
-          ) : !communityId && !resolvingCommunity ? (
-            <span id="custom-arena-lock-tip" className="custom-arena-tooltip">
-              Only the group's moderator can create markets.
-            </span>
-          ) : null}
-        </div>
       </div>
 
       {isLoading ? (
@@ -206,38 +124,19 @@ export default function CustomArenaPage() {
               key={market.id}
               market={market}
               isBusy={busyMarketId === market.id}
-              showCreatorDetails={
-                activeTab === 'created' && expandedCreatorMarketId === market.id
-              }
-              isCreatorYieldBusy={busyCreatorYieldMarketId === market.id}
+              showDetails={expandedMarketId === market.id}
               onVote={handleVote}
               onPredict={(selected, option) => {
                 setSelectedMarket(selected);
                 setSelectedOption(option ?? null);
               }}
               onClaim={handleClaim}
-              onToggleDetails={activeTab === 'created'
-                ? () => setExpandedCreatorMarketId((current) =>
+              onToggleDetails={() => setExpandedMarketId((current) =>
                     current === market.id ? null : market.id,
-                  )
-                : undefined}
-              onClaimCreatorYield={
-                activeTab === 'created' ? handleClaimCreatorYield : undefined
-              }
+                  )}
             />
           ))}
         </div>
-      )}
-
-      {showCreateModal && groupScope && communityId && (
-        <CustomArenaCreateModal
-          scope={groupScope}
-          communityId={communityId}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
-            setActiveTab('created');
-          }}
-        />
       )}
 
       {selectedMarket && (

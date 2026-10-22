@@ -21,8 +21,10 @@ import {
 } from '../types/OfficePool';
 import {
   CustomArenaMarket,
-  CustomArenaModeratorCommunitiesResponse,
+  CustomArenaCommunityListResponse,
+  CustomArenaDashboardResponse,
   CustomArenaProposalResponse,
+  CustomArenaReservePreview,
   CustomArenaScope,
   CustomArenaVoteResponse,
   CustomArenaVoteValue,
@@ -283,37 +285,57 @@ export const predictionApi = {
 export const customArenaApi = {
   createProposal: async (
     topic: string,
-    communityId: string,
     scope: CustomArenaScope,
+    communityId: string,
   ): Promise<CustomArenaProposalResponse> => {
     const response = await api.post<CustomArenaProposalResponse>('/custom-arena/proposals', {
       topic,
-      communityId,
       scope,
+      communityId,
     }, {
-      timeout: 90000,
+      timeout: 300000,
     });
     return response.data;
   },
   createMarket: async (
     communityId: string,
-    marketId: string,
     scope: CustomArenaScope,
+    marketId: string,
     marketDepthPICK: number,
   ): Promise<CustomArenaMarket> => {
     const response = await api.post<CustomArenaMarket>('/custom-arena/markets', {
       communityId,
-      marketId,
       scope,
+      marketId,
       marketDepthPICK,
     }, {
       timeout: 90000,
     });
     return response.data;
   },
-  listModeratorCommunities: async (): Promise<CustomArenaModeratorCommunitiesResponse> => {
-    const response = await api.get<CustomArenaModeratorCommunitiesResponse>(
+  previewReserve: async (
+    marketId: string,
+    marketDepthPICK: number,
+  ): Promise<CustomArenaReservePreview> => {
+    const response = await api.post<CustomArenaReservePreview>(
+      `/custom-arena/markets/${marketId}/reserve-preview`,
+      { marketDepthPICK },
+    );
+    return response.data;
+  },
+  getModeratorCommunities: async (): Promise<CustomArenaCommunityListResponse> => {
+    const response = await api.get<CustomArenaCommunityListResponse>(
       '/custom-arena/moderator/communities',
+    );
+    return response.data;
+  },
+  getModeratorDashboard: async (
+    communityId: string,
+    status?: string,
+  ): Promise<CustomArenaDashboardResponse> => {
+    const response = await api.get<CustomArenaDashboardResponse>(
+      `/custom-arena/moderator/communities/${encodeURIComponent(communityId)}/dashboard`,
+      { params: status ? { status } : undefined },
     );
     return response.data;
   },
@@ -356,19 +378,13 @@ export const customArenaApi = {
     });
     return response.data;
   },
+  getQuote: async (id: string, option: 0 | 1, amountPick: number): Promise<QuoteResponse> => {
+    const response = await api.post<QuoteResponse>(`/custom-arena/markets/${id}/quote`, { option, amountPick });
+    return response.data;
+  },
   claimMarket: async (id: string): Promise<{ txHash: string; paidRaw: string }> => {
     const response = await api.post<{ txHash: string; paidRaw: string }>(
       `/custom-arena/markets/${id}/claim`,
-      undefined,
-      { timeout: 90000 },
-    );
-    return response.data;
-  },
-  claimCreatorYield: async (
-    id: string,
-  ): Promise<{ marketId: string; txHash: string; paidRaw: string; paidPick: number }> => {
-    const response = await api.post<{ marketId: string; txHash: string; paidRaw: string; paidPick: number }>(
-      `/custom-arena/markets/${id}/creator-yield/claim`,
       undefined,
       { timeout: 90000 },
     );

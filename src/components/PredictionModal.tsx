@@ -4,6 +4,7 @@ import { SelectedTeam, CurrencyType, CreatePredictionRecordRequest } from '../ty
 import { formatNumber, formatToTwoDecimals } from '../utils/math';
 import { predictionRecordApi, predictionApi, userApi } from '../services/api';
 import '../styles/modal.scss';
+import QuoteLoading from './QuoteLoading';
 
 interface PredictionModalProps {
   match: Prediction;
@@ -20,6 +21,13 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
   const [userBalance, setUserBalance] = useState<number>(0);
   const [potentialWin, setPotentialWin] = useState<string>('0');
   const [ratio, setRatio] = useState<string>('0');
+  const [quoteState, setQuoteState] = useState<{
+    matchId: string; team: SelectedTeam; amount: number; error?: string;
+  } | null>(null);
+  const currentQuote = quoteState && quoteState.matchId === match.id && quoteState.team === selectedTeam && quoteState.amount === amount
+    ? quoteState : null;
+  const hasQuote = Boolean(currentQuote && !currentQuote.error);
+  const quoteLoading = Boolean(selectedTeam && amount > 0 && amount <= userBalance && !currentQuote);
 
   // Extract userId from JWT and fetch user data
   useEffect(() => {
@@ -46,7 +54,8 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
   // slider doesn't fire one RPC per pixel. Cleanup cancels the in-flight timer
   // AND ignores stale responses if the user moved on before the call returned.
   useEffect(() => {
-    if (!selectedTeam || amount <= 0) {
+    setQuoteState(null);
+    if (!selectedTeam || amount <= 0 || amount > userBalance) {
       setPotentialWin('0');
       setRatio('0');
       return;
@@ -58,18 +67,20 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
         if (cancelled) return;
         setPotentialWin(quote.potentialPayout.toString());
         setRatio(quote.avgEntryPrice.toString());
+        setQuoteState({ matchId: match.id, team: selectedTeam, amount });
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to fetch quote:', err);
         setPotentialWin('0');
         setRatio('0');
+        setQuoteState({ matchId: match.id, team: selectedTeam, amount, error: 'Unable to load quote. Change the amount or reopen this window to retry.' });
       }
     }, 250);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [amount, selectedTeam, match.id]);
+  }, [amount, selectedTeam, match.id, userBalance]);
 
   const handleTeamSelect = (team: SelectedTeam) => {
     setSelectedTeam(team);
@@ -88,6 +99,7 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
   };
 
   const handleConfirm = async () => {
+    if (!hasQuote || isLoading) return;
     if (!selectedTeam) {
       alert('Please select a team');
       return;
@@ -302,16 +314,17 @@ export default function PredictionModal({ match, onClose, onPredictionSuccess }:
           <div className="win-section">
             <div className="section-header">
               <p>To Win:</p>
-              <span>Avg. Price: {Math.round(Number(ratio) * 100)}</span>
+              <span>Avg. Price: {hasQuote ? Math.round(Number(ratio) * 100) : '—'}</span>
             </div>
-            <p className="win-display">{formatToTwoDecimals(potentialWin)} PICK</p>
+            <p className="win-display">{quoteLoading ? <QuoteLoading /> : hasQuote ? `${formatToTwoDecimals(potentialWin)} PICK` : '—'}</p>
+            {currentQuote?.error && <p role="alert">{currentQuote.error}</p>}
           </div>
 
           {/* Confirm Button */}
           <button
             className="confirm-button"
             onClick={handleConfirm}
-            disabled={isLoading || amount === 0}
+            disabled={isLoading || amount <= 0 || amount > userBalance || !hasQuote}
           >
             {isLoading ? 'PROCESSING...' : 'CONFIRM'}
           </button>

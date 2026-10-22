@@ -1,28 +1,27 @@
 import { CustomArenaMarket, CustomArenaVoteValue } from '../types/CustomArena';
 import { formatNumber } from '../utils/math';
+import CustomArenaMarketTerms from './CustomArenaMarketTerms';
 
 interface CustomArenaMarketCardProps {
   market: CustomArenaMarket;
   isBusy?: boolean;
-  showCreatorDetails?: boolean;
-  isCreatorYieldBusy?: boolean;
-  onVote: (market: CustomArenaMarket, value: CustomArenaVoteValue) => void;
-  onPredict: (market: CustomArenaMarket, option?: 0 | 1) => void;
-  onClaim: (market: CustomArenaMarket) => void;
+  showDetails?: boolean;
+  showReserve?: boolean;
+  onVote?: (market: CustomArenaMarket, value: CustomArenaVoteValue) => void;
+  onPredict?: (market: CustomArenaMarket, option?: 0 | 1) => void;
+  onClaim?: (market: CustomArenaMarket) => void;
   onToggleDetails?: (market: CustomArenaMarket) => void;
-  onClaimCreatorYield?: (market: CustomArenaMarket) => void;
 }
 
 export default function CustomArenaMarketCard({
   market,
   isBusy = false,
-  showCreatorDetails = false,
-  isCreatorYieldBusy = false,
+  showDetails = false,
+  showReserve = false,
   onVote,
   onPredict,
   onClaim,
   onToggleDetails,
-  onClaimCreatorYield,
 }: CustomArenaMarketCardProps) {
   const yesOdds = market.odds?.[0];
   const noOdds = market.odds?.[1];
@@ -33,46 +32,63 @@ export default function CustomArenaMarketCard({
   const isOnHold = market.status === 'DISPUTED';
   const isClaimable = market.status === 'RESOLVED' || market.status === 'VOID';
   const hasClaimed = market.claimStatus === 'CONFIRMED';
-  const canPredict = isOpen && hasOdds && !isOnHold;
+  const canPredict = isOpen
+    && hasOdds
+    && !isOnHold
+    && (market.canPredict ?? !market.createdByMe);
   const canClaim = isClaimable && market.canClaim && !hasClaimed;
-  const disabledLabel = !isOpen ? 'Market Closed' : !hasOdds ? 'Odds Loading' : 'Make Prediction';
-  const liquidityProvided = market.liquidityPICK ?? market.liquidityCreatorPrincipalPick;
-  const canClaimCreatorYield = Boolean(market.canClaimCreatorYield && onClaimCreatorYield);
+  const disabledLabel = !isOpen
+    ? 'Market Closed'
+    : !hasOdds
+      ? 'Odds Loading'
+      : !canPredict
+        ? 'Position Unavailable'
+        : 'Make Prediction';
+  const predictionReason = market.canPredictReason
+    || (market.createdByMe ? 'You cannot predict your own market.' : null);
 
   return (
-    <div
-      className="custom-arena-card"
-      onClick={(event) => {
-        if (!onToggleDetails || (event.target as HTMLElement).closest('button')) return;
-        onToggleDetails(market);
-      }}
-    >
+    <div className="custom-arena-card">
       <div className="custom-arena-card-head">
         <span className="custom-arena-date">{formatDeadline(market.resolutionDeadline)}</span>
+        {onToggleDetails && (
+          <button
+            type="button"
+            className="custom-arena-info-button"
+            aria-label={showDetails ? 'Hide market details' : 'Show market details'}
+            aria-expanded={showDetails}
+            aria-controls={`market-details-${market.id}`}
+            onClick={() => onToggleDetails(market)}
+          >
+            <span aria-hidden="true">i</span>
+          </button>
+        )}
       </div>
 
       <div className="custom-arena-question">
         <h3>{market.questionText}</h3>
         <div className="custom-arena-card-meta">
-          <div className="custom-arena-vote-pill" aria-label="Market votes">
-            <button
-              type="button"
-              className={market.userVote === 1 ? 'active' : ''}
-              onClick={() => onVote(market, 1)}
-              aria-label="Upvote market"
-            >
-              <span className="custom-arena-arrow" aria-hidden="true">↑</span>
-            </button>
-            <strong>{market.voteScore}</strong>
-            <button
-              type="button"
-              className={market.userVote === -1 ? 'active' : ''}
-              onClick={() => onVote(market, -1)}
-              aria-label="Downvote market"
-            >
-              <span className="custom-arena-arrow" aria-hidden="true">↓</span>
-            </button>
-          </div>
+          {onVote && (
+            <div className="custom-arena-vote-pill" aria-label="Market votes">
+              <button
+                type="button"
+                className={market.userVote === 1 ? 'active' : ''}
+                onClick={() => onVote(market, 1)}
+                aria-label="Upvote market"
+              >
+                <span className="custom-arena-arrow" aria-hidden="true">↑</span>
+              </button>
+              <strong>{market.voteScore}</strong>
+              <button
+                type="button"
+                className={market.userVote === -1 ? 'active' : ''}
+                onClick={() => onVote(market, -1)}
+                aria-label="Downvote market"
+              >
+                <span className="custom-arena-arrow" aria-hidden="true">↓</span>
+              </button>
+            </div>
+          )}
           <span
             className={
               isOnHold
@@ -85,20 +101,27 @@ export default function CustomArenaMarketCard({
             {isOnHold ? 'On Hold' : market.status}
           </span>
           {market.groupLabel && <span>{market.groupLabel}</span>}
+          {market.sourceChannelName && <span>{market.sourceChannelName}</span>}
           {market.createdByMe && <span>Created by you</span>}
         </div>
       </div>
 
       <div className="custom-arena-card-info">
         <span>
-          Liquidity: <strong>{formatPick(market.collateralPick)}</strong>
+          Volume: <strong>{market.volumePick === undefined ? 'Unavailable' : formatPick(market.volumePick)}</strong>
         </span>
-        <span>
-          Upvotes: <strong>{market.upvoteCount}</strong>
-        </span>
+        {market.participantCount !== undefined ? (
+          <span>
+            Participants: <strong>{market.participantCount}</strong>
+          </span>
+        ) : (
+          <span>
+            Upvotes: <strong>{market.upvoteCount}</strong>
+          </span>
+        )}
       </div>
 
-      <div className="custom-arena-choices">
+      {onPredict && <div className="custom-arena-choices">
         <div className="custom-arena-choice">
           <button
             type="button"
@@ -121,53 +144,68 @@ export default function CustomArenaMarketCard({
           </button>
           <span>{hasOdds ? `${formatNumber(noOdds * 100)}%` : 'Odds loading'}</span>
         </div>
-      </div>
+      </div>}
 
-      <div className="custom-arena-actions">
+      {onPredict || onClaim ? <div className="custom-arena-actions">
         {isOnHold ? (
           <button type="button" className="custom-arena-hold-notice" disabled>
             On Hold — manual review pending
           </button>
-        ) : isClaimable ? (
+        ) : isClaimable && onClaim ? (
           <button type="button" disabled={!canClaim || isBusy} onClick={() => onClaim(market)}>
             {hasClaimed ? 'Claimed' : isBusy ? 'Claiming...' : 'Claim'}
           </button>
         ) : (
-          <button type="button" disabled={!canPredict || isBusy} onClick={() => onPredict(market)}>
+          <button
+            type="button"
+            disabled={!onPredict || !canPredict || isBusy}
+            onClick={() => onPredict?.(market)}
+          >
             {isBusy ? 'Opening...' : disabledLabel}
           </button>
         )}
-      </div>
+        {!canPredict && predictionReason && (
+          <p className="custom-arena-capability-reason">{predictionReason}</p>
+        )}
+      </div> : null}
 
-      {showCreatorDetails && (
-        <div className="custom-arena-creator-details">
-          <div>
-            <span>Liquidity provided</span>
-            <strong>{formatPick(liquidityProvided)}</strong>
-          </div>
+      {showDetails && (
+        <div id={`market-details-${market.id}`} className="custom-arena-market-details">
+          {showReserve && (
+            <div>
+              <span>PICK reserve</span>
+              <strong>{market.collateralPick === undefined ? 'Unavailable' : formatPick(market.collateralPick)}</strong>
+              <p>Held to cover outcome payouts.</p>
+            </div>
+          )}
+          {market.sourceProvider && (
+            <div>
+              <span>Source</span>
+              <strong>{market.sourceProvider}</strong>
+            </div>
+          )}
+          {market.sourceChannelId && (
+            <div>
+              <span>Channel ID</span>
+              <strong>{market.sourceChannelId}</strong>
+            </div>
+          )}
           <div>
             <span>Market status</span>
             <strong>{market.status}</strong>
           </div>
           <div>
-            <span>Resolved outcome</span>
+            <span>AI status</span>
+            <strong>{market.aiStatus || 'Not provided'}</strong>
+          </div>
+          <div>
+            <span>Resolved result</span>
             <strong>{formatOutcome(market)}</strong>
           </div>
-          <div>
-            <span>Claimable creator yield</span>
-            <strong>{formatPick(market.claimableCreatorYieldPick)}</strong>
-          </div>
-          <div>
-            <span>Total creator yield claimed</span>
-            <strong>{formatPick(market.liquidityCreatorClaimedPick)}</strong>
-          </div>
-          <button
-            type="button"
-            disabled={!canClaimCreatorYield || isCreatorYieldBusy}
-            onClick={() => onClaimCreatorYield?.(market)}
-          >
-            {isCreatorYieldBusy ? 'Claiming...' : 'Claim yield'}
-          </button>
+          {market.statusReason && (
+            <p className="custom-arena-status-reason">{market.statusReason}</p>
+          )}
+          <CustomArenaMarketTerms market={market} />
         </div>
       )}
     </div>
@@ -183,13 +221,15 @@ function formatDeadline(value: string) {
   });
 }
 
-function formatPick(value?: number) {
-  return `${formatNumber(value ?? 0)} PICK`;
+function formatPick(value?: number | string) {
+  if (value === undefined) return '0 PICK';
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? `${formatNumber(numeric)} PICK` : `${value} PICK`;
 }
 
 function formatOutcome(market: CustomArenaMarket) {
   if (market.status !== 'RESOLVED' && market.status !== 'VOID') return 'Pending';
-  if (market.status === 'VOID' || market.resolvedOutcome === 256) return 'Unresolvable';
+  if (market.status === 'VOID' || market.resolvedOutcome === 256) return 'Void';
   if (market.resolvedOutcome === 0) return 'Yes';
   if (market.resolvedOutcome === 1) return 'No';
   return 'Pending';

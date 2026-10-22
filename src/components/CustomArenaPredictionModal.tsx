@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { customArenaApi, userApi } from '../services/api';
 import { CustomArenaMarket } from '../types/CustomArena';
+import type { QuoteResponse } from '../types/Prediction';
 import { formatNumber, formatToTwoDecimals } from '../utils/math';
 import '../styles/modal.scss';
+import QuoteLoading from './QuoteLoading';
 
 interface CustomArenaPredictionModalProps {
   market: CustomArenaMarket;
@@ -23,6 +25,9 @@ export default function CustomArenaPredictionModal({
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [userBalance, setUserBalance] = useState(0);
+  const [quoteState, setQuoteState] = useState<{
+    marketId: string; option: 0 | 1; amount: number; quote?: QuoteResponse; error?: string;
+  } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -39,9 +44,25 @@ export default function CustomArenaPredictionModal({
     }
   }, []);
 
-  const selectedOdds = selectedOption === null ? 0 : market.odds?.[selectedOption] ?? 0;
+  useEffect(() => {
+    setQuoteState(null);
+    if (selectedOption === null || amount <= 0 || amount > userBalance || isLoading || showSuccess) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const quote = await customArenaApi.getQuote(market.id, selectedOption, amount);
+        if (!cancelled) setQuoteState({ marketId: market.id, option: selectedOption, amount, quote });
+      } catch {
+        if (!cancelled) setQuoteState({ marketId: market.id, option: selectedOption, amount, error: 'Unable to load quote. Change the amount or reopen this window to retry.' });
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [market.id, selectedOption, amount, userBalance, isLoading, showSuccess]);
+
+  const currentQuote = quoteState && quoteState.marketId === market.id && quoteState.option === selectedOption && quoteState.amount === amount
+    ? quoteState : null;
+  const quote = currentQuote?.quote;
   const selectedLabel = selectedOption === 0 ? 'Yes' : 'No';
-  const potentialWin = selectedOdds > 0 ? amount / selectedOdds : 0;
 
   const handleAmountChange = (delta: number) => {
     setAmount((current) => Math.min(userBalance, Math.max(0, current + delta)));
@@ -60,6 +81,7 @@ export default function CustomArenaPredictionModal({
       alert('Enter a valid PICK amount.');
       return;
     }
+    if (!quote || quote.sharesOut <= 0 || isLoading) return;
 
     setIsLoading(true);
     try {
@@ -95,8 +117,6 @@ export default function CustomArenaPredictionModal({
           <div className="modal-body success-body">
             <p className="success-label">Place amount:</p>
             <p className="success-amount">{formatToTwoDecimals(amount)} PICK</p>
-            <p className="success-label">Potential Win:</p>
-            <p className="success-win">+ {formatToTwoDecimals(potentialWin)} PICK</p>
             <p className="success-message">Good Luck!</p>
             <button className="confirm-button" onClick={handleCloseSuccess}>
               OK
@@ -158,10 +178,6 @@ export default function CustomArenaPredictionModal({
               <p className="vs-title">{market.questionText}</p>
               <p className="chosen-team">{selectedLabel}</p>
             </div>
-            <div className="prize-pool">
-              <p>Prize Pool</p>
-              <span>{formatNumber(market.collateralPick ?? 0)} PICK</span>
-            </div>
           </div>
 
           <div className="amount-section">
@@ -197,12 +213,13 @@ export default function CustomArenaPredictionModal({
           <div className="win-section">
             <div className="section-header">
               <p>To Win:</p>
-              <span>Avg. Price: {Math.round(selectedOdds * 100)}</span>
+              <span>Avg. Price: {quote ? formatToTwoDecimals(quote.avgEntryPrice * 100) : '—'}</span>
             </div>
-            <p className="win-display">{formatToTwoDecimals(potentialWin)} PICK</p>
+            <p className="win-display">{quote ? `${formatToTwoDecimals(quote.potentialPayout)} PICK` : amount > 0 && amount <= userBalance && !isLoading && !currentQuote?.error ? <QuoteLoading /> : '—'}</p>
+            {currentQuote?.error && <p role="alert">{currentQuote.error}</p>}
           </div>
 
-          <button className="confirm-button" onClick={handleConfirm} disabled={isLoading || amount === 0}>
+          <button className="confirm-button" onClick={handleConfirm} disabled={isLoading || amount <= 0 || amount > userBalance || !quote || quote.sharesOut <= 0}>
             {isLoading ? 'PROCESSING...' : 'CONFIRM'}
           </button>
 

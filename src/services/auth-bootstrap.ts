@@ -25,8 +25,20 @@ interface WebappAuthResponse {
 
 export type MiniAppAuthProvider = Extract<
   LoginProvider,
-  'TELEGRAM' | 'MESSENGER' | 'DISCORD'
+  'TELEGRAM' | 'MESSENGER' | 'DISCORD' | 'WHATSAPP'
 >;
+
+/**
+ * Thrown when a WHATSAPP launch has no usable stored session and must complete
+ * the device-pairing handshake. App.tsx catches this to mount WhatsappPairing
+ * rather than showing a dead error screen (F2).
+ */
+export class PairingRequiredError extends Error {
+  constructor() {
+    super('WhatsApp device pairing required');
+    this.name = 'PairingRequiredError';
+  }
+}
 
 let bootstrapPromise: Promise<string> | null = null;
 
@@ -54,10 +66,14 @@ export function detectBootstrapProvider(): MiniAppAuthProvider | null {
   if (urlProvider === 'DISCORD') {
     return 'DISCORD';
   }
+  if (urlProvider === 'WHATSAPP') {
+    return 'WHATSAPP';
+  }
 
   const { loginProvider } = tokenUtils.getTokenData();
   if (loginProvider === 'MESSENGER') return 'MESSENGER';
   if (loginProvider === 'DISCORD') return 'DISCORD';
+  if (loginProvider === 'WHATSAPP') return 'WHATSAPP';
   return null;
 }
 
@@ -128,12 +144,25 @@ async function bootstrapAuthOnce(): Promise<string> {
   }
 
   const { token, loginProvider } = tokenUtils.getTokenData();
-  if (
-    (loginProvider === 'MESSENGER' || loginProvider === 'DISCORD') &&
+  const storedUsable =
+    (loginProvider === 'MESSENGER' ||
+      loginProvider === 'DISCORD' ||
+      loginProvider === 'WHATSAPP') &&
     token &&
-    tokenUtils.isTokenValid()
-  ) {
+    tokenUtils.isTokenValid();
+  // Reuse a stored session only for an in-app navigation (no ?provider) or a
+  // launch whose provider MATCHES the stored one. A different provider's token
+  // (e.g. a Discord session reused on a ?provider=whatsapp link) would authenticate
+  // as the WRONG identity — fall through and re-auth as the launch's provider.
+  if (storedUsable && (!provider || loginProvider === provider)) {
     return token;
+  }
+
+  // WhatsApp has no URL-borne exchange token — a launch with no usable stored
+  // session must complete the device-pairing handshake (F1/F2). Signal that to
+  // App.tsx so it mounts the pairing screen instead of an error.
+  if (provider === 'WHATSAPP') {
+    throw new PairingRequiredError();
   }
 
   throw new Error(

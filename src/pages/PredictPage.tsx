@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PredictionModal from '../components/PredictionModal';
+import MatchCard from '../components/MatchCard';
 import { predictionApi } from '../services/api';
 import { Prediction } from '../types/Prediction';
-import { formatNumber } from '../utils/math';
 import '../styles/pages.scss';
 
 export default function PredictPage() {
@@ -78,44 +78,7 @@ export default function PredictPage() {
       ) : !matchId ? (
         <div className="match-list">
           {predictions.map((match) => (
-            <div
-              key={match.id}
-              className="match-card"
-              onClick={() => setSelectedMatch(match)}
-            >
-              <div className="match-date">
-                {formatDate(match.datetime)} - {formatTime(match.datetime)}
-              </div>
-              <div className="teams">
-                <div className="team">
-                  <img src={match.homeTeam.logo} alt={match.homeTeam.name} />
-                  <span>{match.homeTeam.name}</span>
-                  <div className="ratio">{formatNumber(match.homeOdds * 100)}%</div>
-                </div>
-                <div className="vs">
-                  VS
-                  {match.tieOdds != null && match.tieOdds > 0 && (
-                    <div className="ratio draw-odds">
-                      Draw {formatNumber(match.tieOdds * 100)}%
-                    </div>
-                  )}
-                </div>
-                <div className="team">
-                  <img src={match.awayTeam.logo} alt={match.awayTeam.name} />
-                  <span>{match.awayTeam.name}</span>
-                  <div className="ratio">{formatNumber(match.awayOdds * 100)}%</div>
-                </div>
-              </div>
-              <div className="pool-info">
-                <div className="pool-item">
-                  <span>Token Pool: {formatNumber(match.marketCollateralToken)}</span>
-                </div>
-                <div className="pool-item">
-                  <span>Credit Pool: {formatNumber(match.totalPoolAmountCredit)}</span>
-                </div>
-              </div>
-              <button className="predict-button">Make Prediction</button>
-            </div>
+            <MatchCard key={match.id} match={match} onSelect={setSelectedMatch} />
           ))}
         </div>
       ) : null}
@@ -129,18 +92,4 @@ export default function PredictPage() {
       )}
     </div>
   );
-}
-
-function formatDate(datetime: string | Date) {
-  return new Date(datetime).toLocaleDateString('en', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatTime(datetime: string | Date) {
-  return new Date(datetime).toLocaleTimeString('en', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }

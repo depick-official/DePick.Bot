@@ -1,0 +1,53 @@
+// /games — the league pill bar. Reuses the leaderboard pill look
+// (`.leaderboard-tabs` in pages.scss) but flows HORIZONTALLY with overflow-x, so
+// it scales to any number of leagues instead of a fixed 3-column grid. The rest
+// of the page (`.container`, `.match-card`, `.match-list`) reuses pages.scss.
+.league-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  background: rgba(20, 0, 31, 0.7);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; // Firefox
+  &::-webkit-scrollbar {
+    display: none; // WebKit
+  }
+
+  button {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 14px;
+    background: transparent;
+    color: #d8d0e6;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+
+    &.active {
+      background: linear-gradient(180deg, #fff960 -78.85%, #ffa731 103.85%);
+      color: #1c152a;
+    }
+
+    .count {
+      font-size: 0.75em;
+      font-weight: 700;
+      opacity: 0.7;
+      background: rgba(0, 0, 0, 0.18);
+      border-radius: 999px;
+      padding: 1px 7px;
+    }
+
+    &.active .count {
+      background: rgba(0, 0, 0, 0.15);
+      opacity: 0.85;
+    }
+  }
+}

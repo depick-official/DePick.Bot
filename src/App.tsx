@@ -1,20 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import PredictPage from './pages/PredictPage';
+import GamesPage from './pages/GamesPage';
 import MiniGamePage from './pages/MiniGamePage';
 import DepositPage from './pages/DepositPage';
 import BuyPickQrPage from './pages/BuyPickQrPage';
 import OfficePoolPage from './pages/OfficePoolPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import CustomArenaPage from './pages/CustomArenaPage';
+import ModeratorPortalPage from './pages/ModeratorPortalPage';
 import CustomArenaDashboardPage from './pages/CustomArenaDashboardPage';
 import WelcomeModal, { WelcomeKind } from './components/WelcomeModal';
-import { bootstrapAuth, detectBootstrapProvider } from './services/auth-bootstrap';
+import {
+    bootstrapAuth,
+    detectBootstrapProvider,
+    PairingRequiredError,
+  } from './services/auth-bootstrap';
+import WhatsappPairing from './components/WhatsappPairing';
+import WaProvisionPage from './components/WaProvisionPage';
 
 type AuthState =
   | { status: 'bootstrapping' }
+  | { status: 'pairing' }
   | { status: 'ready' }
   | { status: 'error'; message: string };
+
+/** /wa-provision is authorized by its own bearer magic-link token, NOT an app
+ *  session, so it must bypass the global bootstrapAuth gate. `endsWith` tolerates
+ *  a `/bot` deploy base. */
+const isProvisionRoute = () => window.location.pathname.endsWith('/wa-provision');
 
 /**
  * Read `?welcome=` once, at module load, before anything can navigate or strip
@@ -43,6 +57,9 @@ function App() {
   };
 
   useEffect(() => {
+    // The provisioning page carries its own bearer token — skip the session
+    // bootstrap (Telegram initData / WhatsApp pairing) entirely for it.
+    if (isProvisionRoute()) return;
     // M7.4.6 — Exchange Telegram WebApp initData for a 1h JWT before any
     // page renders. Replaces the legacy ?auth_token= URL parameter.
     const tg = (window as any).Telegram?.WebApp;
@@ -58,6 +75,12 @@ function App() {
       })
       .catch((err) => {
         if (cancelled) {
+          return;
+        }
+        // WhatsApp launch with no usable session → show the device-pairing screen
+        // rather than an error (F2/A2).
+        if (err instanceof PairingRequiredError) {
+          setAuth({ status: 'pairing' });
           return;
         }
         console.error('[auth-bootstrap]', err);
@@ -84,8 +107,17 @@ function App() {
     };
   }, []);
 
+  // Bearer-token provisioning page — rendered directly, bypassing the session
+  // auth state machine (the bootstrap effect no-ops on this route).
+  if (isProvisionRoute()) {
+    return <WaProvisionPage />;
+  }
+
   if (auth.status === 'bootstrapping') {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Authenticating…</div>;
+  }
+  if (auth.status === 'pairing') {
+    return <WhatsappPairing onPaired={() => setAuth({ status: 'ready' })} />;
   }
   if (auth.status === 'error') {
     return (
@@ -103,11 +135,13 @@ function App() {
         <Route path="/" element={<PredictPage />} />
         <Route path="/predict" element={<PredictPage />} />
         <Route path="/predict/:matchId" element={<PredictPage />} />
+        <Route path="/games" element={<GamesPage />} />
         <Route path="/custom-arena" element={<CustomArenaPage />} />
         <Route path="/custom-arena/dashboard" element={<CustomArenaDashboardPage />} />
         <Route path="/mini-game" element={<MiniGamePage />} />
         <Route path="/deposit" element={<DepositPage />} />
         <Route path="/buypick" element={<BuyPickQrPage />} />
+        <Route path="/dashboard" element={<ModeratorPortalPage />} />
         <Route path="/office-pool" element={<OfficePoolPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
       </Routes>

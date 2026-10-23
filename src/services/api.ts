@@ -37,12 +37,15 @@ export interface LeaderboardUserRanking {
   tokenBalance?: number;
   winRate?: number;
   referralCount?: number;
+  volume?: number; // total staked PICK (Volume board)
+  largePredictionCount?: number; // count of predictions over the Big-Pick threshold
 }
 
 export interface LeaderboardResponse {
-  creditRanking: LeaderboardUserRanking[];
-  winRateRanking: LeaderboardUserRanking[];
+  volumeRanking: LeaderboardUserRanking[];
+  bigPredictionRanking: LeaderboardUserRanking[];
   referralRanking: LeaderboardUserRanking[];
+  bigPickThreshold?: number; // stake threshold (whole PICK) behind the Big Picks board
 }
 
 // Create axios instance
@@ -93,7 +96,8 @@ api.interceptors.response.use(
       typeof original?.url === 'string' &&
       (original.url.includes('/auth/telegram/webapp') ||
         original.url.includes('/messenger/exchange') ||
-        original.url.includes('/auth/discord/exchange'));
+        original.url.includes('/auth/discord/exchange') ||
+        original.url.includes('/whatsapp/refresh'));
     if (status !== 401 || !original || original._retried || isBootstrap) {
       if (status === 401) {
         tokenUtils.removeToken();
@@ -102,7 +106,37 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (loginProvider !== 'TELEGRAM') {
+    // Pick the per-provider refresh strategy. TELEGRAM re-runs bootstrapAuth (a
+    // fresh initData exchange). WHATSAPP redeems its device-bound refresh token at
+    // POST /whatsapp/refresh via plain axios (not `api`, to avoid re-entering this
+    // interceptor) and swaps the access token. Any other provider cannot refresh.
+    let refreshFn: (() => Promise<string>) | null = null;
+    if (loginProvider === 'TELEGRAM') {
+      refreshFn = bootstrapAuth;
+    } else if (loginProvider === 'WHATSAPP') {
+      refreshFn = async () => {
+        const refreshToken = tokenUtils.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No WhatsApp refresh token stored');
+        }
+        const baseURL = import.meta.env.VITE_API_URL || '';
+        const resp = await axios.post<{ token: string; expiresAt: number }>(
+          `${baseURL}/whatsapp/refresh`,
+          { refreshToken },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+            },
+            timeout: 15000,
+          },
+        );
+        tokenUtils.setToken(resp.data.token, 'WHATSAPP');
+        return resp.data.token;
+      };
+    }
+
+    if (!refreshFn) {
       tokenUtils.removeToken();
       console.error(`Authentication failed (no refresh available for ${loginProvider || 'unknown'} provider)`);
       return Promise.reject(error);
@@ -125,7 +159,7 @@ api.interceptors.response.use(
 
     isRefreshing = true;
     try {
-      const newToken = await bootstrapAuth();
+      const newToken = await refreshFn();
       pendingQueue.forEach((cb) => cb(newToken));
       pendingQueue = [];
       original.headers.Authorization = `Bearer ${newToken}`;
@@ -229,8 +263,18 @@ export const predictionApi = {
     return response.data.filter(p => p.status === 'UPCOMING');
   },
 
+  // Active leagues + display names — the source of truth for league labels in the
+  // /games browser (keyed on `tournament`, the same field predictions carry).
+  // `displayName` is null until an operator sets it; the SPA then derives a label.
+  getLeagues: async (): Promise<Array<{ tournament: string; displayName: string | null }>> => {
+    const response = await api.get<Array<{ tournament: string; displayName: string | null }>>(
+      '/predictions/leagues',
+    );
+    return response.data;
+  },
+
   // M4.2 — chain-true post-slippage quote. LMSR routes through hub.previewPredict;
-  // NAIVE is BE-synthesized using the same post-bet pool-ratio formula the FE
+  // NAIVE is BE-synthesized using the same post-prediction pool-ratio formula the FE
   // used to compute locally. Replaces `calculateWin` in PredictionModal.
   getQuote: async (predictionId: string, body: QuoteRequest): Promise<QuoteResponse> => {
     const response = await api.post<QuoteResponse>(`/predictions/${predictionId}/quote`, body);
@@ -506,5 +550,100 @@ export const officePoolApi = {
   claim: async (id: string): Promise<unknown> => {
     const response = await api.post<unknown>(`/office-pools/${id}/claim`);
     return response.data;
+  },
+};
+
+// ── Franchise reporting (moderator dashboard, /dashboard command) ────────────
+
+export interface ModeratorCommunity {
+  id: string;
+  scopeProvider: 'TELEGRAM' | 'DISCORD';
+  displayName: string | null;
+  feeBps: number;
+}
+export interface PredictionsSummary {
+  rows: Array<{
+    result: 'WIN' | 'LOSE' | 'TIE' | 'ON_GOING';
+    count: number; volume: number;
+    claimableCredit: number; claimableToken: number;
+    claimedCredit: number; claimedToken: number;
+    unclaimedCredit: number; unclaimedToken: number;
+  }>;
+  totals: Omit<PredictionsSummary['rows'][number], 'result'>;
+  eligibility: { payableVolume: number; provisionalVolume: number };
+  commission: null | { feeBps: number; payableCommission: number; estimatedCommission: number; note: string };
+}
+export interface PickSummary {
+  // Human units (per-token decimals normalized server-side).
+  buyPick: { count: number; usdcIn: number; pickIssued: number };
+  sellPick: { count: number; usdcOut: number; pickReclaimed: number };
+  grantRisk: {
+    promotionalPickReceived: number; promotionalPickUsdcEquiv: number;
+    claimedPickWinnings: number; netPlatformFundedValueExtracted: number;
+    valuation: { pickPerUsd: number; source: string; at: string };
+  };
+  winnings: { claimedToken: number; claimableToken: number; claimableCredit: number };
+}
+export interface ReportRows<T> { items: T[]; total: number; limit: number; offset: number }
+
+// Reserved communityId meaning "users with no home community" (dePick-view reconciliation bucket).
+export const UNASSIGNED_SCOPE = '__unassigned__';
+
+export interface OutflowWatchRow {
+  communityId: string;
+  displayName: string;
+  scopeProvider: string | null; // null for the synthetic "(Unassigned)" row
+  users: number;
+  usdcIn: number;
+  usdcOut: number;
+  net: number;
+  freePick: number;
+  feeBps: number;
+}
+export interface OutflowWatch {
+  rows: OutflowWatchRow[];
+  totals: { users: number; usdcIn: number; usdcOut: number; net: number; freePick: number };
+}
+
+type ReportParams = Record<string, string | number | undefined>;
+
+export interface ReportingScope {
+  isSuperAdmin: boolean;
+  communities: ModeratorCommunity[];
+  allCommunities?: ModeratorCommunity[];
+}
+
+export const reportingApi = {
+  communities: async (): Promise<ReportingScope> => {
+    const r = await api.get<ReportingScope>('/moderator/reports/communities');
+    return r.data;
+  },
+  predictionsSummary: async (params: ReportParams): Promise<PredictionsSummary> => {
+    const r = await api.get<PredictionsSummary>('/moderator/reports/predictions/summary', { params });
+    return r.data;
+  },
+  predictions: async (params: ReportParams): Promise<ReportRows<any>> => {
+    const r = await api.get<ReportRows<any>>('/moderator/reports/predictions', { params });
+    return r.data;
+  },
+  pickSummary: async (params: ReportParams): Promise<PickSummary> => {
+    const r = await api.get<PickSummary>('/moderator/reports/pick-transactions/summary', { params });
+    return r.data;
+  },
+  pick: async (params: ReportParams): Promise<ReportRows<any>> => {
+    const r = await api.get<ReportRows<any>>('/moderator/reports/pick-transactions', { params });
+    return r.data;
+  },
+  outflowWatch: async (params: ReportParams): Promise<OutflowWatch> => {
+    const r = await api.get<OutflowWatch>('/moderator/reports/outflow-watch', { params });
+    return r.data;
+  },
+  userSummary: async (id: string): Promise<any> => {
+    const r = await api.get<any>(`/moderator/reports/user/${id}`);
+    return r.data;
+  },
+  exportCsv: async (params: ReportParams): Promise<string> => {
+    const r = await api.get<string>('/moderator/reports/export', { params, responseType: 'text' });
+    return r.data;
   },
 };

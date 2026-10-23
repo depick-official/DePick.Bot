@@ -1,4 +1,4 @@
-export type CustomArenaScopeProvider = 'TELEGRAM' | 'DISCORD';
+export type CustomArenaScopeProvider = 'TELEGRAM' | 'DISCORD' | 'WHATSAPP';
 export type CustomArenaVoteValue = -1 | 0 | 1;
 export type CustomArenaCreateStatus =
   | 'created'

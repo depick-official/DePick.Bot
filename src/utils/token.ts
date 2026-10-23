@@ -13,19 +13,30 @@ interface TokenData {
 }
 
 export const tokenUtils = {
-  // Set the authentication token and optionally the auth provider
-  setToken: (token: string, loginProvider?: LoginProvider) => {
+  // Set the authentication token and optionally the auth provider + refresh token
+  setToken: (token: string, loginProvider?: LoginProvider, refreshToken?: string) => {
     localStorage.setItem('token', token);
-    
+
     // Store the auth provider separately if provided
     if (loginProvider) {
       localStorage.setItem('loginProvider', loginProvider);
     }
+
+    // WhatsApp device pairing issues a device-bound refresh token; persist it so
+    // the 401 interceptor can redeem a fresh access JWT without re-pairing.
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
   },
-  
+
   // Get just the token string
   getToken: () => {
     return localStorage.getItem('token');
+  },
+
+  // Get the stored refresh token (WhatsApp device-pairing credential)
+  getRefreshToken: () => {
+    return localStorage.getItem('refreshToken');
   },
   
   // Get both the token and auth provider
@@ -40,6 +51,7 @@ export const tokenUtils = {
   removeToken: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('loginProvider');
+    localStorage.removeItem('refreshToken');
   },
   
   // Check if the token is valid

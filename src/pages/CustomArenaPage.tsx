@@ -162,7 +162,11 @@ function useGroupScope(searchParams: URLSearchParams): CustomArenaScope | null {
     const displayName =
       searchParams.get('scope_display_name') || searchParams.get('displayName') || undefined;
 
-    if ((provider !== 'TELEGRAM' && provider !== 'DISCORD') || !scopeExternalId) return null;
+    if (
+      (provider !== 'TELEGRAM' && provider !== 'DISCORD' && provider !== 'WHATSAPP') ||
+      !scopeExternalId
+    )
+      return null;
     return { scopeProvider: provider, scopeExternalId, displayName };
   }, [searchParams]);
 }

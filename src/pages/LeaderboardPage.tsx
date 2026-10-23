@@ -7,25 +7,29 @@ import {
 } from '../services/api';
 import '../styles/pages.scss';
 
-type LeaderboardTab = 'credit' | 'winRate' | 'referral';
+type LeaderboardTab = 'volume' | 'bigPicks' | 'referral';
+
+const DEFAULT_BIG_PICK_THRESHOLD = 100;
 
 const EMPTY_LEADERBOARD: LeaderboardResponse = {
-  creditRanking: [],
-  winRateRanking: [],
+  volumeRanking: [],
+  bigPredictionRanking: [],
   referralRanking: [],
 };
 
 const TABS: Array<{ id: LeaderboardTab; label: string }> = [
-  { id: 'credit', label: 'PICK' },
-  { id: 'winRate', label: 'Win Rate' },
+  { id: 'volume', label: 'Volume' },
+  { id: 'bigPicks', label: 'Big Picks' },
   { id: 'referral', label: 'Referrals' },
 ];
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const provider = searchParams.get('provider') || undefined;
-  const [activeTab, setActiveTab] = useState<LeaderboardTab>('credit');
+  // Upper-case to match the Provider enum the BE scopes by. Mini-App links stamp a
+  // lower-case provider (e.g. ?provider=whatsapp), the same way auth-bootstrap normalises it.
+  const provider = searchParams.get('provider')?.toUpperCase() || undefined;
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>('volume');
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse>(EMPTY_LEADERBOARD);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,13 +65,15 @@ export default function LeaderboardPage() {
   }, [provider]);
 
   const activeRows = useMemo(() => {
-    if (activeTab === 'winRate') return leaderboard.winRateRanking;
+    if (activeTab === 'bigPicks') return leaderboard.bigPredictionRanking;
     if (activeTab === 'referral') return leaderboard.referralRanking;
-    return leaderboard.creditRanking;
+    return leaderboard.volumeRanking;
   }, [activeTab, leaderboard]);
 
+  const bigPickThreshold = leaderboard.bigPickThreshold ?? DEFAULT_BIG_PICK_THRESHOLD;
   const firstPlace = activeRows[0];
-  const scopeLabel = provider === 'TELEGRAM' ? 'Telegram' : 'All DePick';
+  const scopeLabel =
+    provider === 'TELEGRAM' ? 'Telegram' : provider === 'WHATSAPP' ? 'WhatsApp' : 'All DePick';
 
   return (
     <div className="leaderboard-page">
@@ -124,7 +130,7 @@ export default function LeaderboardPage() {
                   <UserAvatar user={user} />
                   <div className="leaderboard-user">
                     <strong>{getDisplayName(user)}</strong>
-                    <span>{getSubLabel(activeTab)}</span>
+                    <span>{getSubLabel(activeTab, bigPickThreshold)}</span>
                   </div>
                   <strong className="leaderboard-value">{getValueLabel(activeTab, user)}</strong>
                 </article>
@@ -151,21 +157,16 @@ function getDisplayName(user: LeaderboardUserRanking): string {
   return user.username?.trim() || `User ${user.id}`;
 }
 
-function getSubLabel(tab: LeaderboardTab): string {
-  if (tab === 'winRate') return 'Completed predictions';
+function getSubLabel(tab: LeaderboardTab, bigPickThreshold: number): string {
+  if (tab === 'bigPicks') return `Picks of ${bigPickThreshold}+ PICK`;
   if (tab === 'referral') return 'Invites';
-  return 'Wallet balance';
+  return 'Total staked';
 }
 
 function getValueLabel(tab: LeaderboardTab, user: LeaderboardUserRanking): string {
-  if (tab === 'winRate') return `${formatPercent(user.winRate)}%`;
+  if (tab === 'bigPicks') return `${user.largePredictionCount ?? 0}`;
   if (tab === 'referral') return `${user.referralCount ?? 0}`;
-  return `${formatCompact(user.tokenBalance ?? 0)} PICK`;
-}
-
-function formatPercent(value?: number): string {
-  if (!Number.isFinite(value)) return '0';
-  return Number(value).toFixed(2).replace(/\.?0+$/, '');
+  return `${formatCompact(user.volume ?? 0)} PICK`;
 }
 
 function formatCompact(value: number): string {

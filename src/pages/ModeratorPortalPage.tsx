@@ -11,10 +11,14 @@ import {
 import '../styles/pages.scss';
 
 /**
- * Franchise dashboard — opened via `/dashboard`. Moderators see their own
- * community (fixed). dePick super-admins additionally get a dePick/Moderator
- * toggle and an all-communities selector (server-elevated over the same user
- * JWT). See docs/WIP/franchise-reporting/ARCHITECTURE.md §12.
+ * Franchise dashboard — opened via `/dashboard`. A moderator sees the
+ * communities they own; when that is more than one (e.g. a Telegram group AND
+ * a Discord server, surfaced together once the two logins are /link-ed) a
+ * picker lets them switch between them — the backend already returns the full
+ * linked-identity set (`getByModerator` cluster expansion). dePick super-admins
+ * additionally get a dePick/Moderator toggle and an all-communities selector
+ * (server-elevated over the same user JWT). See
+ * docs/WIP/franchise-reporting/ARCHITECTURE.md §12.
  */
 const RESULT_COLORS: Record<string, string> = {
   WIN: '#3ecf8e', LOSE: '#ff6b6b', TIE: '#ffd166', ON_GOING: '#8ab4ff',
@@ -60,6 +64,7 @@ export default function ModeratorPortalPage() {
   const [scope, setScope] = useState<ReportingScope | null>(null);
   const [view, setView] = useState<'moderator' | 'depick'>('moderator');
   const [selCommunityId, setSelCommunityId] = useState<string>('all'); // dePick-view selection
+  const [modCommunityId, setModCommunityId] = useState<string | null>(null); // moderator-view selection (multi-community moderators); null → first
   const [pred, setPred] = useState<PredictionsSummary | null>(null);
   const [pick, setPick] = useState<PickSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +95,10 @@ export default function ModeratorPortalPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const ownCommunity = scope?.communities[0] ?? null;
+  // Moderator-view community: the picked one, else the first (preserves the
+  // single-community default). Multi-community moderators switch via the picker.
+  const ownCommunity =
+    scope?.communities.find((c) => c.id === modCommunityId) ?? scope?.communities[0] ?? null;
   const activeCommunity: ModeratorCommunity | null = !scope
     ? null
     : view === 'moderator'
@@ -140,7 +148,7 @@ export default function ModeratorPortalPage() {
       .then(([p, k]) => { if (!cancelled) { setPred(p); setPick(k); } })
       .catch((e: any) => { if (!cancelled) setError(e?.response?.data?.message ?? e?.message ?? 'Could not load.'); });
     return () => { cancelled = true; };
-  }, [scope, view, selCommunityId, predClaim, pickStatus, range, fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope, view, selCommunityId, modCommunityId, predClaim, pickStatus, range, fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // dePick outflow-watch — per-community rollup (super-view only; hidden in moderator view).
   useEffect(() => {
@@ -258,6 +266,16 @@ export default function ModeratorPortalPage() {
               <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({c.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'})</option>
             ))}
             <option value={UNASSIGNED_SCOPE}>(Unassigned — no home community)</option>
+          </select>
+        )}
+        {/* Multi-community moderator (e.g. linked Telegram + Discord) — pick which
+            of your own communities to report on. Hidden for a single community. */}
+        {view === 'moderator' && scope.communities.length > 1 && (
+          <select value={ownCommunity?.id ?? ''} onChange={(e) => setModCommunityId(e.target.value)}
+                  style={{ background: '#241b3a', border: '1px solid #2f2547', color: '#ece8f5', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginTop: 6 }}>
+            {scope.communities.map((c) => (
+              <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({c.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'})</option>
+            ))}
           </select>
         )}
       </div>

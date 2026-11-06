@@ -20,6 +20,21 @@ import '../styles/pages.scss';
  * (server-elevated over the same user JWT). See
  * docs/WIP/franchise-reporting/ARCHITECTURE.md §12.
  */
+// Provider → display label. Covers every scopeProvider a Community can carry;
+// an unmapped value title-cases (e.g. LINE → 'Line') rather than mislabelling —
+// the old `=== 'DISCORD' ? 'Discord' : 'Telegram'` binary rendered WhatsApp
+// (and everything non-Discord) as "Telegram".
+const PROVIDER_LABEL: Record<string, string> = {
+  TELEGRAM: 'Telegram', DISCORD: 'Discord', WHATSAPP: 'WhatsApp', MESSENGER: 'Messenger',
+};
+const providerLabel = (p?: string) =>
+  PROVIDER_LABEL[p ?? ''] ?? (p ? p[0] + p.slice(1).toLowerCase() : '—');
+
+// " · moderator @alice, @bob" for a specific group (a community may have several
+// moderators via the m2m join); empty when none / the all-communities aggregate.
+const modsLabel = (c: ModeratorCommunity | null) =>
+  c?.moderators?.length ? ` · moderator ${c.moderators.map((u) => '@' + u).join(', ')}` : '';
+
 const RESULT_COLORS: Record<string, string> = {
   WIN: '#3ecf8e', LOSE: '#ff6b6b', TIE: '#ffd166', ON_GOING: '#8ab4ff',
 };
@@ -230,9 +245,9 @@ export default function ModeratorPortalPage() {
     ? (isUnassigned
         ? 'dePick view · users with no home community · read-only'
         : activeCommunity
-        ? `dePick view · ${activeCommunity.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'} · fee ${(feeBps / 100).toFixed(1)}%`
+        ? `dePick view · ${providerLabel(activeCommunity.scopeProvider)} · fee ${(feeBps / 100).toFixed(1)}%${modsLabel(activeCommunity)}`
         : 'dePick view · all communities · read-only')
-    : `${ownCommunity?.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'} · volume fee ${(feeBps / 100).toFixed(1)}% · read-only`;
+    : `${providerLabel(ownCommunity?.scopeProvider)} · volume fee ${(feeBps / 100).toFixed(1)}%${modsLabel(activeCommunity)} · read-only`;
 
   const card = (label: string, value: string, sub?: string, hero?: boolean) => (
     <div style={{
@@ -263,7 +278,7 @@ export default function ModeratorPortalPage() {
                   style={{ background: '#241b3a', border: '1px solid #2f2547', color: '#ece8f5', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginTop: 6 }}>
             <option value="all">All communities</option>
             {scope.allCommunities.map((c) => (
-              <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({c.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'})</option>
+              <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({providerLabel(c.scopeProvider)})</option>
             ))}
             <option value={UNASSIGNED_SCOPE}>(Unassigned — no home community)</option>
           </select>
@@ -274,7 +289,7 @@ export default function ModeratorPortalPage() {
           <select value={ownCommunity?.id ?? ''} onChange={(e) => setModCommunityId(e.target.value)}
                   style={{ background: '#241b3a', border: '1px solid #2f2547', color: '#ece8f5', borderRadius: 8, padding: '8px 11px', fontSize: 13, marginTop: 6 }}>
             {scope.communities.map((c) => (
-              <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({c.scopeProvider === 'DISCORD' ? 'Discord' : 'Telegram'})</option>
+              <option key={c.id} value={c.id}>{c.displayName ?? c.id.slice(0, 8)} ({providerLabel(c.scopeProvider)})</option>
             ))}
           </select>
         )}

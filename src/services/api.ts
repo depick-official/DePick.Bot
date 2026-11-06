@@ -557,9 +557,11 @@ export const officePoolApi = {
 
 export interface ModeratorCommunity {
   id: string;
-  scopeProvider: 'TELEGRAM' | 'DISCORD';
+  scopeProvider: 'TELEGRAM' | 'DISCORD' | 'WHATSAPP' | 'MESSENGER';
   displayName: string | null;
   feeBps: number;
+  /** Moderator usernames for this community (oldest-assignment first). */
+  moderators?: string[];
 }
 export interface PredictionsSummary {
   rows: Array<{

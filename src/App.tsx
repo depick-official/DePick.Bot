@@ -40,6 +40,18 @@ function readWelcomeKind(): WelcomeKind | null {
   return value === 'referral' || value === 'discord' ? value : null;
 }
 
+/**
+ * Where to go after WhatsApp pairing when another page on this origin sent
+ * the user here to sign in (the legacy mini-game at /mini-game/ does this when
+ * it finds no session). Only a same-origin absolute path is honoured: one
+ * leading slash, so `//evil.example` and `https://…` can never redirect
+ * off-site.
+ */
+function readReturnTo(): string | null {
+  const value = new URLSearchParams(window.location.search).get('returnTo');
+  return value && /^\/(?!\/)/.test(value) ? value : null;
+}
+
 function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'bootstrapping' });
   const [welcome, setWelcome] = useState<WelcomeKind | null>(readWelcomeKind);
@@ -117,7 +129,18 @@ function App() {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Authenticating…</div>;
   }
   if (auth.status === 'pairing') {
-    return <WhatsappPairing onPaired={() => setAuth({ status: 'ready' })} />;
+    return (
+      <WhatsappPairing
+        onPaired={() => {
+          const returnTo = readReturnTo();
+          if (returnTo) {
+            window.location.replace(returnTo);
+            return;
+          }
+          setAuth({ status: 'ready' });
+        }}
+      />
+    );
   }
   if (auth.status === 'error') {
     return (
